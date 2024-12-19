@@ -10,7 +10,7 @@ from icecream import ic
 
 from functools import partial
 
-from .modeling import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, TwoWayTransformer
+from .modeling import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, TwoWayTransformer, Sam_task, ImageEncoderViT_task, PromptEncoder_task
 
 
 def build_sam_vit_h(image_size, num_classes, pixel_mean=[123.675, 116.28, 103.53], pixel_std=[58.395, 57.12, 57.375],
@@ -80,13 +80,15 @@ def _build_sam(
         pixel_mean,
         pixel_std,
         checkpoint=None,
+        task_num=1
 ):
     prompt_embed_dim = 256
     image_size = image_size
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size  # Divide by 16 here
-    sam = Sam(
-        image_encoder=ImageEncoderViT(
+    sam = Sam_task(
+        task_num=task_num,
+        image_encoder=ImageEncoderViT_task(
             depth=encoder_depth,
             embed_dim=encoder_embed_dim,
             img_size=image_size,
@@ -100,11 +102,12 @@ def _build_sam(
             window_size=14,
             out_chans=prompt_embed_dim,
         ),
-        prompt_encoder=PromptEncoder(
+        prompt_encoder=PromptEncoder_task(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
             mask_in_chans=16,
+            task_num=task_num,
         ),
         mask_decoder=MaskDecoder(
             # num_multimask_outputs=3,
