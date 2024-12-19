@@ -223,7 +223,7 @@ class PromptEncoder_task(nn.Module):
         input_image_size: Tuple[int, int],
         mask_in_chans: int,
         task_num: int=1,
-        image_embed_dim: int=768,
+        image_embed_dim: int=1280,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """

@@ -136,7 +136,7 @@ class ImageEncoderViT_task(nn.Module):
         rel_pos_zero_init: bool = True,
         window_size: int = 0,
         global_attn_indexes: Tuple[int, ...] = (),
-        adapter_hidden_dim: int= 512, # ? need to think
+        adapter_hidden_dim: int= 320, # ? need to think
     ) -> None:
         """
         Args:
@@ -244,7 +244,7 @@ class Task_adapter(nn.Module):
         
         super().__init__()
         self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
+        # h = [hidden_dim] * (num_layers - 1)
         self.task_adapter_mlp_list = nn.ModuleList()
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(

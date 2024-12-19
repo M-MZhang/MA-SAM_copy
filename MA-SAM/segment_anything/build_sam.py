@@ -106,6 +106,7 @@ def _build_sam(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
+            image_embed_dim=encoder_embed_dim,
             mask_in_chans=16,
             task_num=task_num,
         ),

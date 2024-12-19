@@ -18,6 +18,7 @@ from utils import DiceLoss
 from torchvision import transforms
 from icecream import ic
 from datetime import datetime
+from test import inference
 
 
 def calc_loss(outputs, low_res_label_batch, ce_loss, dice_loss, dice_weight:float=0.8):
@@ -52,6 +53,30 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
 
     trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True,
                              worker_init_fn=worker_init_fn)
+    
+    num = 0
+    for name, para in model.named_parameters():
+        para.requires_grad_(False)
+        if "task_specific_embed" in name:
+            para.requires_grad_(True)
+            num += para.numel()
+            # print(name)
+        elif "task_adapter" in name:
+            para.requires_grad_(True)
+            num += para.numel()
+            # print(name)
+        elif "prompt_adapter" in name:
+            para.requires_grad_(True)
+            num += para.numel()
+            # print(name)
+        elif "mask_decoder" in name:
+            para.requires_grad_(True)
+            num += para.numel()
+    # varify the trainable parameters
+    for name, para in model.named_parameters():
+        if para.requires_grad:
+            print(name)
+
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
     model.train()
@@ -119,8 +144,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
 
             logging.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item()))
 
-        save_interval = 20 
+        save_interval = 10 
         if (epoch_num + 1) % save_interval == 0:
+            inference(args, multimask_output, model, None)
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
             try:
                 model.save_parameters(save_mode_path)
