@@ -143,13 +143,21 @@ class _Fact_tt_ImageEncoderViT(nn.Module):
         self.img_size = self.ImageEncoderViT.img_size
 
     
-    def forward(self, x: torch.Tensor, d_size) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, d_size, task_embed) -> torch.Tensor:
         x = self.ImageEncoderViT.patch_embed(x)  
+        task_adapter_embeddings = self.ImageEncoderViT.task_adapter(task_embed)
         if self.ImageEncoderViT.pos_embed is not None:
             x = x + self.ImageEncoderViT.pos_embed
 
-        for blk in self.ImageEncoderViT.blocks:
-            x = blk(x, self.FacTu, self.FacTv, d_size)
+        count = 0 #
+        # for blk in self.ImageEncoderViT.blocks:
+        #     x = blk(x, self.FacTu, self.FacTv, d_size)
+        for i in range(len(self.ImageEncoderViT.blocks)):
+            if i in self.ImageEncoderViT.global_attn_indexes:
+                x = x + task_adapter_embeddings[count]
+                count += 1
+
+            x = self.ImageEncoderViT.blocks[i](x, self.FacTu, self.FacTv, d_size)
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2))  
 
