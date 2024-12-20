@@ -417,7 +417,7 @@ class Fact_tt_Sam(nn.Module):
         sam_dict.update(FacTv_new_state_dict)
 
         # load prompt encoder
-        prompt_encoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
+        prompt_encoder_keys = [k for k in sam_keys if ('prompt_encoder' in k) and ('adapter' not in k)]
         prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
         prompt_encoder_new_state_dict = {k: v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
         sam_dict.update(prompt_encoder_new_state_dict)
