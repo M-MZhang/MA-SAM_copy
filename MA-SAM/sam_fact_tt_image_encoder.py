@@ -380,6 +380,44 @@ class Fact_tt_Sam(nn.Module):
 
         merged_dict = {**a_tensors, **b_tensors, **FacTu_tensors, **FacTv_tensors, **prompt_encoder_tensors, **mask_decoder_tensors, **adapter_tensor}
         torch.save(merged_dict, filename)
+    
+
+    def save_parameters_task(self, filename: str) -> None:
+        r"""Only safetensors is supported now.
+
+        pip install safetensor if you do not have one installed yet.
+
+        save both FacT_tt and fc parameters.
+        """
+
+        assert filename.endswith(".pt") or filename.endswith('.pth')
+
+       
+        task_embed_tensors = {}
+        task_adapter_tensors = {}
+        prompt_adapter_tensors = {}
+        mask_decoder_tensors = {}
+
+
+        # save prompt encoder, only `state_dict`, the `named_parameter` is not permitted
+        if isinstance(self.sam, torch.nn.DataParallel) or isinstance(self.sam, torch.nn.parallel.DistributedDataParallel):
+            state_dict = self.sam.module.state_dict()
+        else:
+            state_dict = self.sam.state_dict()
+        for key, value in state_dict.items():
+            if "task_specific_embed" in key:
+                task_embed_tensors[key] = value
+            if "task_adapter" in key:
+                task_adapter_tensors[key] = value
+            if "prompt_adapter" in key:
+                prompt_adapter_tensors[key] = value   
+            if 'mask_decoder' in key:
+                mask_decoder_tensors[key] = value
+          
+
+        merged_dict = { **task_embed_tensors, **task_adapter_tensors, **prompt_adapter_tensors, **mask_decoder_tensors, }
+        torch.save(merged_dict, filename)
+    
 
     def load_parameters(self, filename: str) -> None:
         r"""Only safetensors is supported now.
@@ -434,6 +472,47 @@ class Fact_tt_Sam(nn.Module):
         adapter_new_state_dict = {k: v for k, v in zip(adapter_keys, adapter_values)}
         sam_dict.update(adapter_new_state_dict)
 
+        self.sam.load_state_dict(sam_dict)
+    
+    def load_parameters_task(self, filename: str) -> None:
+        r"""Only safetensors is supported now.
+
+        pip install safetensor if you do not have one installed yet.\
+
+        load both FacT_tt and fc parameters.
+        """
+
+        assert filename.endswith(".pt") or filename.endswith('.pth')
+
+        state_dict = torch.load(filename)
+        sam_dict = self.sam.state_dict()
+        sam_keys = sam_dict.keys()
+
+        # load task_specific_embed
+        task_embed_keys = [k for k in sam_keys if 'task_specific_embed' in k]
+        task_embed_values = [state_dict[k] for k in task_embed_keys]
+        task_embed_new_state_dict = {k:v for k, v in zip(task_embed_keys, task_embed_values)}
+        sam_dict.update(task_embed_new_state_dict)
+
+        # load task_adapter
+        task_adapter_keys = [k for k in sam_keys if 'task_adapter' in k]
+        task_adapter_values = [state_dict[k] for k in task_adapter_keys]
+        task_adapter_new_state_dict = {k: v for k, v in zip(task_adapter_keys, task_adapter_values)}
+        sam_dict.update(task_adapter_new_state_dict)
+
+        # load prompt_adapter
+        prompt_adapter_keys = [k for k in sam_keys if 'prompt_adapter' in k]
+        prompt_adapter_values = [state_dict[k] for k in prompt_adapter_keys]
+        prompt_adapter_new_state_dict = {k:v for k,v in zip(prompt_adapter_keys, prompt_adapter_values)}
+        sam_dict.update(prompt_adapter_new_state_dict)
+
+        # load mask decoder
+        mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k]
+        mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
+        mask_decoder_new_state_dict = {k: v for k, v in zip(mask_decoder_keys, mask_decoder_values)}
+        sam_dict.update(mask_decoder_new_state_dict)
+
+       
         self.sam.load_state_dict(sam_dict)
 
     def reset_parameters(self) -> None:
