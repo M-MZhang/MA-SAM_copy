@@ -175,7 +175,7 @@ class ImageEncoderViT_task(nn.Module):
                 torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim)
             )
         
-        self.task_adapter = Task_adapter(embed_dim, adapter_hidden_dim, embed_dim, len(global_attn_indexes)) #这里的维度需要商量
+        self.task_adapter = Task_adapter(embed_dim, adapter_hidden_dim, embed_dim, len(depth)) #这里调整为，在每一层都输入
         
         self.blocks = nn.ModuleList()
         for i in range(depth):
@@ -217,15 +217,15 @@ class ImageEncoderViT_task(nn.Module):
         if self.pos_embed is not None:
             x = x + self.pos_embed
 
-        # for blk in self.blocks:
-        #     x = blk(x)
-        count = 0
-        for i in range(self.depth):
-            if i in self.global_attn_indexes:
-                x = x + task_adapter_embeddings[count]
-                count += 1
+        for blk in self.blocks:
+            x = blk(x)
+        # count = 0
+        # for i in range(self.depth):
+        #     if i in self.global_attn_indexes:
+        #         x = x + task_adapter_embeddings[count]
+        #         count += 1
             
-            x = self.blocks[i](x)
+        #     x = self.blocks[i](x)
 
         x = self.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
 

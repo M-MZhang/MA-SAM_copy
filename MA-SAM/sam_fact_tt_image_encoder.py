@@ -153,9 +153,9 @@ class _Fact_tt_ImageEncoderViT(nn.Module):
         # for blk in self.ImageEncoderViT.blocks:
         #     x = blk(x, self.FacTu, self.FacTv, d_size)
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.ImageEncoderViT.global_attn_indexes:
-                x = x + task_adapter_embeddings[count]
-                count += 1
+            # if i in self.ImageEncoderViT.global_attn_indexes:
+            x = x + task_adapter_embeddings[count]
+            count += 1
 
             x = self.ImageEncoderViT.blocks[i](x, self.FacTu, self.FacTv, d_size)
 

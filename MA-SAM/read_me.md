@@ -1,0 +1,1 @@
+v0-1相较于v0主要是将adapter的参数量增加了，在image_encoder的每一层都让embedding能够被加入，而不仅仅像v0一样，只在全局层加入
