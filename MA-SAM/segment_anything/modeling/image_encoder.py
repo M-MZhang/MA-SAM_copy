@@ -175,7 +175,7 @@ class ImageEncoderViT_task(nn.Module):
                 torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim)
             )
         
-        self.task_adapter = Task_adapter(embed_dim, adapter_hidden_dim, embed_dim, len(depth)) #这里调整为，在每一层都输入
+        self.task_adapter = Task_adapter(embed_dim, adapter_hidden_dim, embed_dim, depth) #这里调整为，在每一层都输入
         
         self.blocks = nn.ModuleList()
         for i in range(depth):
