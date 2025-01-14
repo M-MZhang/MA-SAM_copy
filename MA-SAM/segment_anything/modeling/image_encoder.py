@@ -175,8 +175,8 @@ class ImageEncoderViT_task(nn.Module):
                 torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim)
             )
         
-        self.task_adapter = Task_adapter(embed_dim, adapter_hidden_dim, embed_dim, len(global_attn_indexes)) #这里的维度需要商量
-        
+        self.task_adapter = Task_adapter(out_chans, embed_dim//4, embed_dim, len(global_attn_indexes)) #这里的维度需要商量
+      
         self.blocks = nn.ModuleList()
         for i in range(depth):
             block = Block(
@@ -248,15 +248,17 @@ class Task_adapter(nn.Module):
         self.task_adapter_mlp_list = nn.ModuleList()
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
-                nn.Linear(input_dim, hidden_dim),
+                nn.Linear(input_dim, output_dim),
                 nn.GELU(),
-                nn.Linear(hidden_dim, output_dim),
+                nn.Linear(output_dim, output_dim//4),
+                nn.GELU(),
+                nn.Linear(output_dim//4, output_dim),
             ))
     
     def forward(self, task_embed: torch.Tensor):
         task_adapter_embeddings = []
         for i in range(self.num_layers):
-            task_adapter_embeddings.append(torch.mean(self.task_adapter_mlp_list[i](task_embed),axis=0)) #这里尝试增加task_num数量但是平权
+            task_adapter_embeddings.append(torch.mean(self.task_adapter_mlp_list[i](task_embed),dim=0)) #这里尝试增加task_num数量但是平权
         
         return task_adapter_embeddings
 

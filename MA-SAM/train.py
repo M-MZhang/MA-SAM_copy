@@ -18,12 +18,12 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3,4,5,6,7"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/synapseCT/Training/2D_all_5slice', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/MA_SAM/h-v0')
+parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/MA_SAM/h-v1')
 parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/synapseCT/Training/2D_all_5slice')
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=1, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=8, help='total gpu')
-parser.add_argument('--base_lr', type=float, default=0.0008, help='segmentation network learning rate')
+parser.add_argument('--base_lr', type=float, default=0.0002, help='segmentation network learning rate')
 
 parser.add_argument('--max_epochs', type=int,default=100, help='maximum epoch number to train')
 parser.add_argument('--stop_epoch', type=int, default=500, help='maximum epoch number to train')

@@ -102,13 +102,13 @@ def _build_sam(
             window_size=14,
             out_chans=prompt_embed_dim,
         ),
-        prompt_encoder=PromptEncoder_task(
+        prompt_encoder=PromptEncoder(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
-            image_embed_dim=encoder_embed_dim,
+            # image_embed_dim=encoder_embed_dim,
             mask_in_chans=16,
-            task_num=task_num,
+            # task_num=task_num,
         ),
         mask_decoder=MaskDecoder(
             # num_multimask_outputs=3,

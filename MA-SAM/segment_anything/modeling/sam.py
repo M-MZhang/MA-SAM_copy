@@ -136,7 +136,7 @@ class Sam_task(nn.Module):
     def __init__(
         self,
         image_encoder: ImageEncoderViT_task,
-        prompt_encoder: PromptEncoder_task,
+        prompt_encoder: PromptEncoder,
         mask_decoder: MaskDecoder,
         task_num :int = 1, # 调整为task_sam
         pixel_mean: List[float] = [123.675, 116.28, 103.53],
@@ -165,12 +165,15 @@ class Sam_task(nn.Module):
         image_embed_dim = self.image_encoder.patch_embed.proj.out_channels
         prompt_embed_dim = self.prompt_encoder.embed_dim
         
-        self.task_specific_embed = nn.Embedding(task_num, image_embed_dim) #[1, 256]
+        # self.task_specific_embed = nn.Embedding(task_num, image_embed_dim) #[1, 256]
         # self.prompt_adapter = nn.Sequential(
         #     nn.Linear(image_embed_dim, prompt_embed_dim),
         #     nn.GELU(),
         #     nn.Linear(prompt_embed_dim, prompt_embed_dim)
         # )
+
+        self.task_specific_embed = self.mask_decoder.mask_tokens.weight
+        
 
     @property
     def device(self) -> Any:
@@ -186,9 +189,9 @@ class Sam_task(nn.Module):
         batched_input = batched_input.contiguous().view(-1, 3, hw_size, hw_size) #[b*d, 3, h, w]
 
         input_images = self.preprocess(batched_input)
-        image_embeddings = self.image_encoder(input_images, d_size, self.task_specific_embed.weight)
+        image_embeddings = self.image_encoder(input_images, d_size, self.task_specific_embed)
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
-            points=None, boxes=None, masks=None, task_specific_embed=self.task_specific_embed.weight,
+            points=None, boxes=None, masks=None,
         ) #[batch, 256, 32, 32]
         low_res_masks, iou_predictions = self.mask_decoder(
             image_embeddings=image_embeddings,
