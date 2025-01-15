@@ -215,7 +215,7 @@ class Sam_task(nn.Module):
         return outputs
     
     def init_weights(self):
-        task_adapter = self.image_encoder.task_adapter
+        task_adapter = self.image_encoder.ImageEncoderViT.task_adapter.task_adapter_mlp_list
         layers = len(task_adapter)
         for layer in range(layers):
             nn.init.constant_(task_adapter[layer][-1].weight, 0)
