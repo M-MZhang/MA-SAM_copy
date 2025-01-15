@@ -248,11 +248,12 @@ class Task_adapter(nn.Module):
         self.task_adapter_mlp_list = nn.ModuleList()
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
-                nn.Linear(input_dim, output_dim),
+                nn.Linear(input_dim, output_dim//4),
                 nn.GELU(),
-                nn.Linear(output_dim, output_dim//4),
+                nn.Linear(output_dim//4, output_dim//4),
                 nn.GELU(),
                 nn.Linear(output_dim//4, output_dim),
+                # nn.Linear(output_dim, output_dim)
             ))
     
     def forward(self, task_embed: torch.Tensor):

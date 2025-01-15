@@ -409,13 +409,14 @@ class Fact_tt_Sam(nn.Module):
                 task_embed_tensors[key] = value
             if "task_adapter" in key:
                 task_adapter_tensors[key] = value
-            if "prompt_adapter" in key:
-                prompt_adapter_tensors[key] = value   
-            if 'mask_decoder' in key:
-                mask_decoder_tensors[key] = value
+            # if "prompt_adapter" in key:
+            #     prompt_adapter_tensors[key] = value   
+            # if 'mask_decoder' in key:
+            #     mask_decoder_tensors[key] = value
           
 
-        merged_dict = { **task_embed_tensors, **task_adapter_tensors, **prompt_adapter_tensors, **mask_decoder_tensors, }
+        # merged_dict = { **task_embed_tensors, **task_adapter_tensors, **prompt_adapter_tensors, **mask_decoder_tensors, }
+        merged_dict = { **task_embed_tensors, **task_adapter_tensors,}
         torch.save(merged_dict, filename)
     
 

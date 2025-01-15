@@ -168,9 +168,9 @@ class Sam_task(nn.Module):
         # self.task_specific_embed = nn.Embedding(task_num, image_embed_dim) #[1, 256]
         # self.prompt_adapter = nn.Sequential(
         #     nn.Linear(image_embed_dim, prompt_embed_dim),
-        #     nn.GELU(),
+        #     nn.GELU()
         #     nn.Linear(prompt_embed_dim, prompt_embed_dim)
-        # )
+        # 
 
         self.task_specific_embed = self.mask_decoder.mask_tokens.weight
         
@@ -198,7 +198,8 @@ class Sam_task(nn.Module):
             image_pe=self.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
-            multimask_output=multimask_output
+            multimask_output=multimask_output,
+            task_specific_embed = self.task_specific_embed,
         )
         masks = self.postprocess_masks(
             low_res_masks,
@@ -212,6 +213,13 @@ class Sam_task(nn.Module):
         }
         # print(low_res_masks.shape)
         return outputs
+    
+    def init_weights(self):
+        task_adapter = self.image_encoder.task_adapter
+        layers = len(task_adapter)
+        for layer in range(layers):
+            nn.init.constant_(task_adapter[layer][-1].weight, 0)
+            nn.init.constant_(task_adapter[layer][-1].bias, 0)
 
 
     def postprocess_masks(

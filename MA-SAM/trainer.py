@@ -34,9 +34,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     
     output_filename = datetime.now().strftime("%Y%m%d-%H%M%S")
     
-    if not os.path.exists('./training_log'):
-        os.mkdir('./training_log')
-    logging.basicConfig(filename= './training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
+    if not os.path.exists('/root/data1/zmm/seg4medicine/save/MA_SAM/training_log'): # 换到外面去存储
+        os.mkdir('/root/data1/zmm/seg4medicine/save/MA_SAM/training_log')
+    logging.basicConfig(filename= '/root/data1/zmm/seg4medicine/save/MA_SAM/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
@@ -69,15 +69,17 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         #     para.requires_grad_(True)
         #     num += para.numel()
             # print(name)
-        elif "mask_decoder" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-    logging.info("The number of trainable parameters is {}M".format(num/1000000))
+        # elif "mask_decoder" in name:
+        #     para.requires_grad_(True)
+        #     num += para.numel()
+    
     # varify the trainable parameters
     for name, para in model.named_parameters():
         if para.requires_grad:
             print(name)
-    
+    logging.info("The number of trainable parameters is {}M".format(num/1000000))
+
+    model.sam.init_weights()
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
