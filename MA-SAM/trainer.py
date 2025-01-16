@@ -69,9 +69,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         #     para.requires_grad_(True)
         #     num += para.numel()
             # print(name)
-        # elif "mask_decoder" in name:
-        #     para.requires_grad_(True)
-        #     num += para.numel()
+        elif "mask_decoder.mask_tokens" in name:
+            para.requires_grad_(True)
+            num += para.numel()
     
     # varify the trainable parameters
     for name, para in model.named_parameters():
@@ -104,6 +104,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
     
     iterator = tqdm(range(max_epoch), ncols=70)
+
+    # 测试最基础的版本
+    inference(args, multimask_output, model, None)
     
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
