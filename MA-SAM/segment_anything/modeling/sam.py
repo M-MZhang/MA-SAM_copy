@@ -257,3 +257,9 @@ class Sam_task(nn.Module):
         x = F.pad(x, (0, padw, 0, padh))
         return x
 
+    def init_weights(self):
+        task_adapter = self.image_encoder.ImageEncoderViT.task_adapter.task_adapter_mlp_list
+        layers = len(task_adapter)
+        for layer in range(layers):
+            nn.init.constant_(task_adapter[layer][-1].weight, 0)
+            nn.init.constant_(task_adapter[layer][-1].bias, 0)

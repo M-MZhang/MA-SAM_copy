@@ -72,12 +72,17 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         elif "mask_decoder" in name:
             para.requires_grad_(True)
             num += para.numel()
-    logging.info("The number of trainable parameters is {}M".format(num/1000000))
+    
     # varify the trainable parameters
     for name, para in model.named_parameters():
         if para.requires_grad:
             print(name)
     
+    logging.info("The number of trainable parameters is {}M".format(num/1000000))
+
+    model.sam.init_weights()
+    logging.infor("Test the zero init_weights action!")
+    inference(args, multimask_output, model, None)
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
