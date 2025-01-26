@@ -253,7 +253,8 @@ class Task_adapter(nn.Module):
                 nn.Linear(output_dim//4, output_dim//4),
                 nn.GELU(),
                 nn.Linear(output_dim//4, output_dim),
-                # nn.Linear(output_dim, output_dim)
+                nn.GELU(),
+                nn.Linear(output_dim, output_dim) #增加一项全连接层
             ))
     
     def forward(self, task_embed: torch.Tensor):
