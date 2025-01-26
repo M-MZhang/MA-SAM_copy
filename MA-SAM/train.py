@@ -25,7 +25,7 @@ parser.add_argument('--batch_size', type=int, default=1, help='batch_size per gp
 parser.add_argument('--n_gpu', type=int, default=8, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0002, help='segmentation network learning rate')
 
-parser.add_argument('--max_epochs', type=int,default=50, help='maximum epoch number to train')
+parser.add_argument('--max_epochs', type=int,default=100, help='maximum epoch number to train')
 parser.add_argument('--stop_epoch', type=int, default=500, help='maximum epoch number to train')
 
 parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
