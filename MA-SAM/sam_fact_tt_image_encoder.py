@@ -154,10 +154,12 @@ class _Fact_tt_ImageEncoderViT(nn.Module):
         #     x = blk(x, self.FacTu, self.FacTv, d_size)
         for i in range(len(self.ImageEncoderViT.blocks)):
             if i in self.ImageEncoderViT.global_attn_indexes:
-                x = x + task_adapter_embeddings[count]
+                # 这里要改为将task_adapter_embeddings[count] concate在x上面
+                x = self.ImageEncoderViT.blocks[i](x, self.FacTu, self.FacTv, d_size, task_adapter_embeddings[count])
                 count += 1
-
-            x = self.ImageEncoderViT.blocks[i](x, self.FacTu, self.FacTv, d_size)
+            else:
+                x = self.ImageEncoderViT.blocks[i](x, self.FacTu, self.FacTv, d_size)
+           
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2))  
 
@@ -222,6 +224,93 @@ class _Fact_tt_Block(nn.Module):
 
         return x
 
+class _Fact_tt_Block_task(nn.Module):
+    def __init__(
+            self,
+            Block: nn.Module,
+    ):
+        super().__init__()
+        self.Block = Block
+        
+    
+    def forward(self, x: torch.Tensor, FacTu, FacTv, d_size, task_embed) -> torch.Tensor:
+
+        b_size, hw_size = x.shape[0], x.shape[1]
+
+        # 3D adapter
+        shortcut = x
+        x = self.Block.adapter_norm(x)
+        x = self.Block.adapter_linear_down(x)
+        x = x.contiguous().view(int(b_size/d_size), d_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = self.Block.adapter_conv(x)
+        x = torch.permute(x, (0, 2, 3, 4, 1))
+        x = x.contiguous().view(b_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = self.Block.adapter_act(x)
+        x = self.Block.adapter_linear_up(x)
+        x = shortcut + x
+        # end 3D adapter
+
+        shortcut = x
+        
+        x = self.Block.norm1(x)
+
+        x = self.Block.attn(x, FacTu, FacTv, task_embed)
+
+        x = shortcut + x
+
+        # 3D adapter
+        shortcut = x
+        x = self.Block.adapter_norm_2(x)
+        x = self.Block.adapter_linear_down_2(x)
+        x = x.contiguous().view(int(b_size/d_size), d_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = self.Block.adapter_conv_2(x)
+        x = torch.permute(x, (0, 2, 3, 4, 1))
+        x = x.contiguous().view(b_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = self.Block.adapter_act_2(x)
+        x = self.Block.adapter_linear_up_2(x)
+        x = shortcut + x
+        # end 3D adapter
+
+        x = x + self.Block.mlp(self.Block.norm2(x))
+
+        return x
+
+class _Fact_tt_Attention_task(nn.Module):
+    def __init__(
+            self,
+            Attention: nn.Module,
+    ):
+        super().__init__()
+        self.Attention = Attention
+    
+    def forward(self, x: torch.Tensor, FacTu, FacTv, task_embed: torch.Tensor) -> torch.Tensor:
+        B, H, W, _ = x.shape
+        # concate task_embed
+        x = x.reshape(B, H*W, -1)
+        task_embed = task_embed.expand(B, 1, -1)
+        x = torch.concat([x, task_embed], dim=-2) #[B, H*W+1, -1]
+        # qkv with shape (3, B, nHead, H * W + 1, C)
+        qkv = self.Attention.qkv(x, FacTu, FacTv).reshape(B, H * W + 1, 3, self.Attention.num_heads, -1).permute(2, 0, 3, 1, 4)
+        # q, k, v with shape (B * nHead, H * W + 1, C)
+        q, k, v = qkv.reshape(3, B * self.Attention.num_heads, H * W + 1, -1).unbind(0)
+
+        attn = (q * self.Attention.scale) @ k.transpose(-2, -1) #[B * nHead, H*W+1, H*W+1] nheads=16
+
+        if self.Attention.use_rel_pos:
+            attn[:,:-1,:-1] = add_decomposed_rel_pos(attn[:, :-1, :-1], q[:, :-1, :], self.Attention.rel_pos_h, self.Attention.rel_pos_w, (H, W), (H, W))
+
+        attn = attn.softmax(dim=-1)
+        # x = (attn @ v).view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        x = attn @ v
+        x = x[:, :-1, :] #取消掉concate的东西
+        x = x.view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        x = self.Attention.proj(x)
+
+        return x
+
+
 class _Fact_tt_Attention(nn.Module):
     def __init__(
             self,
@@ -281,6 +370,39 @@ class _Fact_tt_qkv(nn.Module):
         qkv[:, :, :, -self.dim:] += new_v*self.s
         return qkv
 
+class _Fact_tt_qkv_task(nn.Module):
+    """In Sam it is implemented as
+    self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+    B, N, C = x.shape
+    qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+    q, k, v = qkv.unbind(0)
+    """
+
+    def __init__(
+            self,
+            qkv: nn.Module,
+            q_FacTs: nn.Module,
+            v_FacTs: nn.Module,
+            s,
+    ):
+        super().__init__()
+        self.qkv = qkv
+        self.q_FacTs = q_FacTs
+        self.v_FacTs = v_FacTs
+        self.dim = qkv.in_features
+        self.w_identity = torch.eye(qkv.in_features)
+        self.dp_q = nn.Dropout(0.1)
+        self.dp_v = nn.Dropout(0.1)
+        self.s = s
+
+    def forward(self, x, FacTu, FacTv):
+        qkv = self.qkv(x)  # B,N,N,3*org_C
+        new_q = FacTv(self.dp_q(self.q_FacTs(FacTu(x))))  
+        new_v = FacTv(self.dp_v(self.v_FacTs(FacTu(x))))
+        qkv[:, :, : self.dim] += new_q*self.s
+        qkv[:, :, -self.dim:] += new_v*self.s
+        return qkv
+
 class Fact_tt_Sam(nn.Module):
     """Applies low-rank adaptation to a Sam model's image encoder.
 
@@ -327,15 +449,26 @@ class Fact_tt_Sam(nn.Module):
             v_FacTs = nn.Linear(r, r, bias=False)
             self.q_FacTs.append(q_FacTs)
             self.v_FacTs.append(v_FacTs)
-            blk.attn.qkv = _Fact_tt_qkv(
+            
+
+            if t_layer_i in sam_model.image_encoder.global_attn_indexes :
+                blk.attn.qkv = _Fact_tt_qkv_task(
+                    w_qkv_linear,
+                    q_FacTs,
+                    v_FacTs,
+                    s
+                )
+                blk.attn = _Fact_tt_Attention_task(blk.attn)
+                sam_model.image_encoder.blocks[t_layer_i] = _Fact_tt_Block_task(blk)
+            else:
+                blk.attn.qkv = _Fact_tt_qkv(
                 w_qkv_linear,
                 q_FacTs,
                 v_FacTs,
                 s
-            )
-
-            blk.attn = _Fact_tt_Attention(blk.attn)  
-            sam_model.image_encoder.blocks[t_layer_i] = _Fact_tt_Block(blk)  
+                )
+                blk.attn = _Fact_tt_Attention(blk.attn)  
+                sam_model.image_encoder.blocks[t_layer_i] = _Fact_tt_Block(blk) 
         
         sam_model.image_encoder = _Fact_tt_ImageEncoderViT(sam_model.image_encoder, self.FacTu, self.FacTv)
         self.sam = sam_model

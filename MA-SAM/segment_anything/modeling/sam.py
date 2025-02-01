@@ -155,10 +155,15 @@ class Sam_task(nn.Module):
           pixel_std (list(float)): Std values for normalizing pixels in the input image.
         """
         super().__init__()
+        # create task_specific embed
+        task_specific_embed = torch.empty_like(mask_decoder.mask_tokens.weight)
+        nn.init.normal_(task_specific_embed, std=0.02)
+        self.task_specific_embed = nn.Parameter(task_specific_embed)
         
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
+        
         self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
         self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
 
@@ -172,7 +177,7 @@ class Sam_task(nn.Module):
         #     nn.Linear(prompt_embed_dim, prompt_embed_dim)
         # 
 
-        self.task_specific_embed = self.mask_decoder.mask_tokens.weight
+        
         
 
     @property
