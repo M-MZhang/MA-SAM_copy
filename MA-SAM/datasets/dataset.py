@@ -15,6 +15,7 @@ import PIL.ImageOps
 import PIL.ImageEnhance
 import PIL.ImageDraw
 import cv2
+import json
 
 HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
@@ -90,7 +91,8 @@ def random_erasing(
     # erase
     imgs[sy:sy + ny, sx:sx + nx, :] = filling
     label[sy:sy + ny, sx:sx + nx, :] = 0.
-
+   
+    
     return imgs, label
 
 def posterize(img, label, v):
@@ -357,11 +359,22 @@ class dataset_reader(Dataset):
         
         self.data_dir = base_dir
 
-        if split=="train":
-            df = pd.read_csv(base_dir+'/training.csv')
-            self.sample_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["image_pth"]]
-            self.masks_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["mask_pth"]]
-            self.num_classes = num_classes
+        # df = pd.read_csv(base_dir+'/training.csv')
+        # self.sample_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["image_pth"]]
+        # self.masks_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["mask_pth"]]
+        with open(base_dir+'/npy.json', 'r') as file:
+            data = json.load(file)
+        train_list = data['train']
+        val_list = data['val']
+        test_list = data['test']
+        if split == 'train':
+            self.sample_list = train_list
+        elif split == 'val':
+            self.sample_list = val_list
+        elif split == 'test':
+            self.sample_list = test_list
+        
+        self.num_classes = num_classes
 
     def __len__(self):
         return len(self.sample_list)
@@ -369,18 +382,18 @@ class dataset_reader(Dataset):
     def __getitem__(self, idx):
         if self.split == "train":
 
-            data = read_image(self.sample_list[idx])
+            data = read_image(self.sample_list[idx]['images'])
             data = np.clip(data, HU_min, HU_max)
             data = (data-HU_min)/(HU_max-HU_min)*255.0
             
             data = np.float32(data)
             data = (data - data_mean) / data_std
             data = (data-data.min())/(data.max()-data.min()+0.00000001)
-            h, w, d = data.shape
+            h, w, c= data.shape
 
-            data = np.float32(data)
+            data = np.float32(data) #降到只有一维
             
-            mask = read_image(self.masks_list[idx])
+            mask = read_image(self.sample_list[idx]['masks'])
             mask = np.float32(mask)
             
             if self.num_classes==12:
@@ -391,7 +404,9 @@ class dataset_reader(Dataset):
 
         sample = {'image': image, 'label': label}
         if self.transform:
+            sample['label'] = sample['label'][:, :, np.newaxis]
             sample = self.transform(sample)
+            sample['label'] = np.squeeze(sample['label'], axis=0)
 
-        sample['case_name'] = self.sample_list[idx].strip('\n')
+        sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
         return sample

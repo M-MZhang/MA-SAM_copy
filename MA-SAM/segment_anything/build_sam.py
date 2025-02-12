@@ -86,9 +86,8 @@ def _build_sam(
     image_size = image_size
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size  # Divide by 16 here
-    sam = Sam_task(
-        task_num=task_num,
-        image_encoder=ImageEncoderViT_task(
+    sam = Sam(
+        image_encoder=ImageEncoderViT(
             depth=encoder_depth,
             embed_dim=encoder_embed_dim,
             img_size=image_size,
@@ -106,9 +105,7 @@ def _build_sam(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
-            # image_embed_dim=encoder_embed_dim,
             mask_in_chans=16,
-            # task_num=task_num,
         ),
         mask_decoder=MaskDecoder(
             # num_multimask_outputs=3,
@@ -155,7 +152,7 @@ def load_from(sam, state_dict, image_size, vit_patch_size, encoder_global_attn_i
         pos_embed = F.interpolate(pos_embed, (token_size, token_size), mode='bilinear', align_corners=False)
         pos_embed = pos_embed.permute(0, 2, 3, 1)  # [b, h, w, c]
         new_state_dict['image_encoder.pos_embed'] = pos_embed
-        rel_pos_keys = [k for k in sam_dict.keys() if 'rel_pos' in k]
+        rel_pos_keys = [k for k in sam_dict.keys() if '.rel_pos' in k] # 感觉这里应该加上.
         global_rel_pos_keys = []
         for rel_pos_key in rel_pos_keys:
             num = int(rel_pos_key.split('.')[2])
@@ -170,3 +167,4 @@ def load_from(sam, state_dict, image_size, vit_patch_size, encoder_global_attn_i
             new_state_dict[k] = rel_pos_params[0, 0, ...]
     sam_dict.update(new_state_dict)
     return sam_dict
+ 

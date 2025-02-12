@@ -55,6 +55,7 @@ class ImageEncoderViT(nn.Module):
         """
         super().__init__()
         self.img_size = img_size
+        self.global_attn_indexes = global_attn_indexes # add the property
 
         self.patch_embed = PatchEmbed(
             kernel_size=(patch_size, patch_size),
@@ -69,6 +70,8 @@ class ImageEncoderViT(nn.Module):
             self.pos_embed = nn.Parameter(
                 torch.zeros(1, img_size // patch_size, img_size // patch_size, embed_dim)
             )
+        
+        # self.task_adapter = Task_adapter(out_chans, embed_dim//4, embed_dim, len(global_attn_indexes)) #这里的维度需要商量
 
         self.blocks = nn.ModuleList()
         for i in range(depth):

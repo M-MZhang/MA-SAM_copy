@@ -19,7 +19,9 @@ from torchvision import transforms
 from icecream import ic
 from datetime import datetime
 from test import inference
+from torch.optim.lr_scheduler import _LRScheduler
 
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
 
 def calc_loss(outputs, low_res_label_batch, ce_loss, dice_loss, dice_weight:float=0.8):
     low_res_logits = outputs['low_res_logits']
@@ -27,6 +29,78 @@ def calc_loss(outputs, low_res_label_batch, ce_loss, dice_loss, dice_weight:floa
     loss_dice = dice_loss(low_res_logits, low_res_label_batch, softmax=True)
     loss = (1 - dice_weight) * loss_ce + dice_weight * loss_dice
     return loss, loss_ce, loss_dice
+
+
+class _BaseWarmupScheduler(_LRScheduler):
+
+    def __init__(
+        self,
+        optimizer,
+        successor,
+        warmup_epoch,
+        last_epoch=-1,
+        verbose=False
+    ):
+        self.successor = successor
+        self.warmup_epoch = warmup_epoch
+        super().__init__(optimizer, last_epoch, verbose)
+
+    def get_lr(self):
+        raise NotImplementedError
+
+    def step(self, epoch=None):
+        if self.last_epoch >= self.warmup_epoch:
+            self.successor.step(epoch)
+            self._last_lr = self.successor.get_last_lr()
+        else:
+            super().step(epoch)
+
+class ConstantWarmupScheduler(_BaseWarmupScheduler):
+
+    def __init__(
+        self,
+        optimizer,
+        successor,
+        warmup_epoch,
+        cons_lr,
+        last_epoch=-1,
+        verbose=False
+    ):
+        self.cons_lr = cons_lr
+        super().__init__(
+            optimizer, successor, warmup_epoch, last_epoch, verbose
+        )
+
+    def get_lr(self):
+        if self.last_epoch >= self.warmup_epoch:
+            return self.successor.get_last_lr()
+        return [self.cons_lr for _ in self.base_lrs]
+
+
+class LinearWarmupScheduler(_BaseWarmupScheduler):
+
+    def __init__(
+        self,
+        optimizer,
+        successor,
+        warmup_epoch,
+        min_lr,
+        last_epoch=-1,
+        verbose=False
+    ):
+        self.min_lr = min_lr
+        super().__init__(
+            optimizer, successor, warmup_epoch, last_epoch, verbose
+        )
+
+    def get_lr(self):
+        if self.last_epoch >= self.warmup_epoch:
+            return self.successor.get_last_lr()
+        if self.last_epoch == 0:
+            return [self.min_lr for _ in self.base_lrs]
+        return [
+            lr * self.last_epoch / self.warmup_epoch for lr in self.base_lrs
+        ]
 
 
 def trainer_run(args, model, snapshot_path, multimask_output, low_res):
@@ -51,7 +125,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True,
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                              worker_init_fn=worker_init_fn)
     
     num = 0
@@ -64,15 +138,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         elif "task_adapter" in name:
             para.requires_grad_(True)
             num += para.numel()
-        # elif "mask_decoder.mask_tokens" in name:
-        #     para.requires_grad_(True)
-        #     num += para.numel()
-    
-    # 这里不知道为什么在model.named_parameters里面看不见
-    # for name, para in model.sam.mask_decoder.named_parameters():
-    #     if "mask_tokens" in name:
-    #         para.requires_grad_(True)
-    #         num += para.numel()
+        elif "mask_decoder" in name:
+            para.requires_grad_(True)
+            num += para.numel()
     
     # varify the trainable parameters
     for name, para in model.named_parameters():
@@ -80,7 +148,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             print(name)
     logging.info("The number of trainable parameters is {}M".format(num/1000000))
 
-    model.sam.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
+    # model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
@@ -92,11 +160,22 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     else:
         b_lr = base_lr
     if args.AdamW:
-        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.1)
+        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.01)
     else:
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
     if args.use_amp:
         scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
+
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    #         optimizer, float(args.max_epochs)
+    #     )
+    
+    # if args.warmup:
+    #     scheduler = ConstantWarmupScheduler(
+    #             optimizer, scheduler, args.warmup_period,
+    #             1e-5
+    #         )
+    
     writer = SummaryWriter(snapshot_path + '/log')
     iter_num = 0
     max_epoch = args.max_epochs
@@ -112,8 +191,6 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
             image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
-            image_batch = image_batch.unsqueeze(2)
-            image_batch = torch.cat((image_batch, image_batch, image_batch), dim=2)
             hw_size = image_batch.shape[-1]
             label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
 
@@ -143,31 +220,33 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_
-
+            # lr = scheduler.get_last_lr()
             iter_num = iter_num + 1
-            writer.add_scalar('info/lr', lr_, iter_num)
+            writer.add_scalar('info/lr',lr_ , iter_num)
             writer.add_scalar('info/total_loss', loss, iter_num)
             writer.add_scalar('info/loss_ce', loss_ce, iter_num)
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
 
-            logging.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item()))
+            logging.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f, lr: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item(),lr_))
 
-        save_interval = 10 
+        save_interval = 10
         if (epoch_num + 1) % save_interval == 0:
-            inference(args, multimask_output, model, None)
+            # inference(args, multimask_output, model, None)
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
             try:
-                model.save_parameters_task(save_mode_path)
+                model.save_parameters(save_mode_path)
             except:
-                model.module.save_parameters_task(save_mode_path)
+                # model.module.save_parameters(save_mode_path)
+                torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
             try:
-                model.save_parameters_task(save_mode_path)
+                model.save_parameters(save_mode_path)
             except:
-                model.module.save_parameters_task(save_mode_path)
+                # model.module.save_parameters(save_mode_path)
+                torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
             iterator.close()
             break

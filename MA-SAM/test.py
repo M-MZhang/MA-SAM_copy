@@ -21,30 +21,36 @@ from scipy.ndimage import zoom
 from utils import calculate_metric_percase
 import nibabel as nib
 
+from datasets.dataset import dataset_reader, RandomGenerator
+from torchvision import transforms
+import json
+
 HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
 
+os.environ['PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT'] = '1.0'
+
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
-    image, label = image.squeeze(0), label.squeeze(0) #[b, h, w, d], [b, h, w, d]
-    label = label[:,:,:,2]
+    image, label = image.squeeze(0), label.squeeze(0) #[d, h, w, 3], [d, h, w]
+    # label = label[:,:,:,2]
     
-    probability = np.expand_dims(np.zeros_like(label, dtype=np.float32), axis=-1) #[b, h, w, c]
-    probability = repeat(probability, 'd h w c -> d h w (repeat c)', repeat=classes+1)
+    probability = np.expand_dims(np.zeros_like(label, dtype=np.float32), axis=-1) #[d, h, w, 1]
+    probability = repeat(probability, 'd h w c -> d h w (repeat c)', repeat=classes+1) #[d, h, w, classes+1]
 
-    probability = np.concatenate((probability[0:1], probability[0:1], probability, probability[-1:], probability[-1:]), axis=0)
+    # probability = np.concatenate((probability[0:1], probability[0:1], probability, probability[-1:], probability[-1:]), axis=0)
 
-    avg_cnt = np.ones_like(probability, dtype=np.float32)
+    avg_cnt = np.ones_like(probability, dtype=np.float32) #[d, h, w, classes+1]
     for ind in range(image.shape[0]):
         slice = image[ind]
         x, y = slice.shape[0], slice.shape[1]
         if x != patch_size[0] or y != patch_size[1]:
             slice = zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3)
         
-        inputs = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0).float().cuda()
-        inputs = repeat(inputs, 'b c h w d -> b (repeat c) h w d', repeat=3)
-        inputs = torch.permute(inputs, (0, -1, 1, 2, 3))
+        inputs = torch.from_numpy(slice).unsqueeze(0).float().cuda() #[b, h, w, c]
+        # inputs = repeat(inputs, 'b h w c -> b c h w', repeat=3)
+        inputs = torch.permute(inputs, (0, 3, 1, 2))
         net.eval()
         with torch.no_grad():
             outputs = net(inputs, multimask_output, patch_size[0])
@@ -59,46 +65,46 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
             if x != out_h or y != out_w:
                 out_pred = zoom(out_pred, (1.0, x / out_h, y / out_w, 1.0), order=3)
             
-            probability[ind: ind+5] += out_pred
-            avg_cnt[ind: ind+5] += 1.
+            probability[ind] += out_pred[0]
+            avg_cnt[ind] += 1.
             
     probability = probability/avg_cnt
     prediction = np.argmax(probability, axis=-1)
-    prediction = prediction[2:-2]
+    # prediction = prediction[2:-2]
 
     metric_list = []
     for i in range(1, classes + 1):
         metric_list.append(calculate_metric_percase(prediction == i, label == i))
 
-    if test_save_path is not None:
+    # if test_save_path is not None:
         
-        image_data = np.moveaxis(image[:,:,:,2].astype(np.float32), 0, -1)
-        prediction_data = np.moveaxis(prediction.astype(np.float32), 0, -1)
-        label_data = np.moveaxis(label.astype(np.float32), 0, -1)
+    #     image_data = np.moveaxis(image[:,:,:,2].astype(np.float32), 0, -1)
+    #     prediction_data = np.moveaxis(prediction.astype(np.float32), 0, -1)
+    #     label_data = np.moveaxis(label.astype(np.float32), 0, -1)
 
-        image_data = np.rot90(np.flip(image_data, axis=1), k=-1, axes=(0, 1))
-        prediction_data = np.rot90(np.flip(prediction_data, axis=1), k=-1, axes=(0, 1))
-        label_data = np.rot90(np.flip(label_data, axis=1), k=-1, axes=(0, 1))
+    #     image_data = np.rot90(np.flip(image_data, axis=1), k=-1, axes=(0, 1))
+    #     prediction_data = np.rot90(np.flip(prediction_data, axis=1), k=-1, axes=(0, 1))
+    #     label_data = np.rot90(np.flip(label_data, axis=1), k=-1, axes=(0, 1))
 
-        # Create Nifti images
-        img_nifti = nib.Nifti1Image(image_data, np.eye(4))
-        prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
-        lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
+    #     # Create Nifti images
+    #     img_nifti = nib.Nifti1Image(image_data, np.eye(4))
+    #     prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
+    #     lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
 
-        # Set spacing
-        img_nifti.header['pixdim'][1:4] = [1, 1, 1]
-        prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
-        lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
+    #     # Set spacing
+    #     img_nifti.header['pixdim'][1:4] = [1, 1, 1]
+    #     prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
+    #     lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
 
-        # Save the images
-        img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
-        prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
-        lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
+    #     # Save the images
+    #     img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
+    #     prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
+    #     lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
         
     return metric_list
 
 def inference(args, multimask_output, model, test_save_path=None):
-    data_fd_list = pd.read_csv(args.data_path+'/test.csv')
+    data_fd_list = pd.read_csv('/root/data1/zmm/seg4medicine/data/synapseCT/Training/2D_all_5slice'+'/test.csv')
     data_fd_list = data_fd_list["image_pth"]
     data_fd_list = [data_fd.split("/")[-3] for data_fd in data_fd_list]
     data_fd_list = list(set(data_fd_list))
@@ -107,14 +113,15 @@ def inference(args, multimask_output, model, test_save_path=None):
     model.eval()
     metric_list = []
     for data_fd in tqdm(data_fd_list):
-        image_file_list = os.listdir(args.data_path+'/'+data_fd + '/images')
+        image_file_path = args.data_path+'/'+'npy/images/'+'img'+str(data_fd)
+        image_file_list = os.listdir(image_file_path)
         image_file_list.sort()
         image_arr_list = []
         mask_arr_list = []
         for image_file in image_file_list:
-            with open(args.data_path+'/'+data_fd + '/images/'+image_file, 'rb') as file:
+            with open(image_file_path + '/' + image_file, 'rb') as file:
                 image_arr = pickle.load(file)
-            with open(args.data_path+'/'+data_fd + '/masks/'+image_file.replace("2Dimage", "2Dmask"), 'rb') as file:
+            with open(args.data_path+'/'+'npy/masks/'+'img'+str(data_fd)+'/'+image_file, 'rb') as file:
                 mask_arr = pickle.load(file)
 
             image_arr = np.clip(image_arr, HU_min, HU_max)
@@ -131,8 +138,8 @@ def inference(args, multimask_output, model, test_save_path=None):
             image_arr_list.append(image_arr)
             mask_arr_list.append(mask_arr)
 
-        image = np.expand_dims(np.stack(image_arr_list), axis=0) 
-        label = np.expand_dims(np.stack(mask_arr_list), axis=0)
+        image = np.expand_dims(np.stack(image_arr_list), axis=0) #[1, d, h, w, 3]
+        label = np.expand_dims(np.stack(mask_arr_list), axis=0) #[1, d, h, w]
         case_name = data_fd
 
         h, w = image.shape[2], image.shape[3]
@@ -168,8 +175,8 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/mnt/weka/wekafs/rad-megtron/cchen/project_results/MA_SAM/results-1/epoch_159.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/mnt/weka/wekafs/rad-megtron/cchen/synapseCT/Training/2D_all_5slice')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/ft-sam/epoch_99.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
     
     parser.add_argument('--num_classes', type=int, default=12)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
@@ -177,8 +184,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-    parser.add_argument('--ckpt', type=str, default='/mnt/weka/wekafs/rad-megtron/cchen/PretrainedModel/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
-    parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
+    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_b_01ec64.pth', help='Pretrained checkpoint')
+    parser.add_argument('--vit_name', type=str, default='vit_b', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
     parser.add_argument('--module', type=str, default='sam_fact_tt_image_encoder')
@@ -196,7 +203,7 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     
-    args.output_dir = args.adapt_ckpt[:-4]
+    args.output_dir = args.adapt_ckpt[:-2]
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
 
@@ -206,11 +213,14 @@ if __name__ == '__main__':
                                                                     checkpoint=args.ckpt, pixel_mean=[0., 0., 0.],
                                                                 pixel_std=[1., 1., 1.])
     
-    pkg = import_module(args.module)
-    net = pkg.Fact_tt_Sam(sam, args.rank, s=args.scale).cuda()
+    # pkg = import_module(args.module)
+    # net = pkg.Fact_tt_Sam(sam, args.rank, s=args.scale).cuda()
+    net = sam.cuda()
 
     assert args.adapt_ckpt is not None
-    net.load_parameters(args.adapt_ckpt)
+    # net.load_parameters(args.adapt_ckpt)
+    state_dict = torch.load(args.adapt_ckpt)
+    net.load_state_dict(state_dict)
 
     if args.num_classes > 1:
         multimask_output = True
@@ -223,11 +233,12 @@ if __name__ == '__main__':
     
     if not os.path.exists('./testing_log'):
         os.mkdir('./testing_log')
-    logging.basicConfig(filename= './testing_log/' + args.adapt_ckpt.split('/')[-3] + '_log.txt', level=logging.INFO,
+    logging.basicConfig(filename= './testing_log/' + args.adapt_ckpt.split('/')[-2] + '_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
 
+    # args.is_savenii = False #暂时不保存可视化的东西
     if args.is_savenii:
         test_save_path = args.output_dir
     else:
