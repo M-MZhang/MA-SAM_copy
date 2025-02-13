@@ -362,11 +362,12 @@ class dataset_reader(Dataset):
         # df = pd.read_csv(base_dir+'/training.csv')
         # self.sample_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["image_pth"]]
         # self.masks_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["mask_pth"]]
-        with open(base_dir+'/npy.json', 'r') as file:
+        with open(base_dir+'/npy_new.json', 'r') as file:
             data = json.load(file)
+        
         train_list = data['train']
         val_list = data['val']
-        test_list = data['test']
+        test_list = val_list
         if split == 'train':
             self.sample_list = train_list
         elif split == 'val':
