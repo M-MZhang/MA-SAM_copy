@@ -131,17 +131,20 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     num = 0
     for name, para in model.named_parameters():
         para.requires_grad_(False)
-        if "task_specific_embed" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
-            para.requires_grad_(True)
-            num += para.numel()
-            # print(name)
-        elif "task_adapter" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "mask_adapter" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "mask_decoder" in name:
+        # if "task_specific_embed" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
+        #     para.requires_grad_(True)
+        #     num += para.numel()
+        #     # print(name)
+        # elif "task_adapter" in name:
+        #     para.requires_grad_(True)
+        #     num += para.numel()
+        # elif "mask_adapter" in name:
+        #     para.requires_grad_(True)
+        #     num += para.numel()
+        # elif "mask_decoder" in name:
+        #     para.requires_grad_(True)
+        #     num += para.numel()
+        if "mask_decoder" in name:
             para.requires_grad_(True)
             num += para.numel()
     
@@ -151,7 +154,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             print(name)
     logging.info("The number of trainable parameters is {}M".format(num/1000000))
 
-    model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
+    # model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)

@@ -82,9 +82,9 @@ if __name__ == "__main__":
                                                                 checkpoint=args.ckpt, pixel_mean=[0., 0., 0.],
                                                                 pixel_std=[1., 1., 1.])
 
-    pkg = import_module(args.module)
-    net = pkg.Sam_task(sam).cuda() 
-    # net = sam.cuda()
+    # pkg = import_module(args.module)
+    # net = pkg.Sam_task(sam).cuda() 
+    net = sam.cuda()
     if args.compile:
         net = torch.compile(net)
 
