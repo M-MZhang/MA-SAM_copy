@@ -134,6 +134,7 @@ class ImageEncoderViT_task(nn.Module):
         super().__init__()
         self.ImageEncoderViT = ImageEncoderViT
         self.img_size = self.ImageEncoderViT.img_size
+        # self.task_adapter = self.task_adapter = Task_adapter(out_chans, embed_dim//4, embed_dim, len(global_attn_indexes))
     
 
     def forward(self, x: torch.Tensor, task_embed: torch.Tensor) -> torch.Tensor:
@@ -296,11 +297,11 @@ class MaskDecoder_task(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
         # Concatenate output tokens
-        mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed 
+        # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed 
         # 虽然这里self.mask_tokens会因为数量变化了被随机初始化，但仍然加了一个task_specific_embed
         # 表示与前面的关系
 
-        output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, mask_tokens], dim=0)
+        output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, self.MaskDecoder.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 

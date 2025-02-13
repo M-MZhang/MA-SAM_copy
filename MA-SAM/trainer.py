@@ -108,9 +108,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     
     output_filename = datetime.now().strftime("%Y%m%d-%H%M%S")
     
-    if not os.path.exists('/root/data1/zmm/seg4medicine/save/MA_SAM/training_log'): # 换到外面去存储
-        os.mkdir('/root/data1/zmm/seg4medicine/save/MA_SAM/training_log')
-    logging.basicConfig(filename= '/root/data1/zmm/seg4medicine/save/MA_SAM/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
+    if not os.path.exists('/root/data1/zmm/seg4medicine/save/Vanille_me_v1/training_log'): # 换到外面去存储
+        os.mkdir('/root/data1/zmm/seg4medicine/save/Vanille_me_v1/training_log')
+    logging.basicConfig(filename= '/root/data1/zmm/seg4medicine/save/Vanille_me_v1/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
