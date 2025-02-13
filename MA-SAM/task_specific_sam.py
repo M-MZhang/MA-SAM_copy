@@ -187,7 +187,7 @@ class Task_adapter(nn.Module):
     def forward(self, task_embed: torch.Tensor):
         task_adapter_embeddings = []
         for i in range(self.num_layers):
-            task_adapter_embeddings.append(torch.mean(self.task_adapter_mlp_list[i](task_embed),dim=0)) #这里尝试增加task_num数量但是平权
+            task_adapter_embeddings.append(self.task_adapter_mlp_list[i](task_embed),dim=0) # what if we do not give it mean[task_num, dim]
         
         return task_adapter_embeddings
 
@@ -230,24 +230,25 @@ class Attention_task(nn.Module):
     
     def forward(self, x:torch.Tensor, task_embed:torch.Tensor) -> torch.Tensor:
         B, H, W, _ = x.shape
+        task_num, dim = task_embed.shape
         # concate task_embed
         x = x.reshape(B, H*W, -1)
-        task_embed = task_embed.expand(B, 1, -1)
+        task_embed = task_embed.expand(B, task_num, -1)
         x = torch.concat([x, task_embed], dim=-2) #[B, H*W+1, -1]
         # qkv with shape (3, B, nHead, H * W + 1, C)
-        qkv = self.Attention.qkv(x).reshape(B, H * W + 1, 3, self.Attention.num_heads, -1).permute(2, 0, 3, 1, 4)
+        qkv = self.Attention.qkv(x).reshape(B, H * W + task_num, 3, self.Attention.num_heads, -1).permute(2, 0, 3, 1, 4)
         # q, k, v with shape (B * nHead, H * W + 1, C)
-        q, k, v = qkv.reshape(3, B * self.Attention.num_heads, H * W + 1, -1).unbind(0)
+        q, k, v = qkv.reshape(3, B * self.Attention.num_heads, H * W + task_num, -1).unbind(0)
 
         attn = (q * self.Attention.scale) @ k.transpose(-2, -1) #[B * nHead, H*W+1, H*W+1] nheads=16
 
         if self.Attention.use_rel_pos:
-            attn[:,:-1,:-1] = add_decomposed_rel_pos(attn[:, :-1, :-1], q[:, :-1, :], self.Attention.rel_pos_h, self.Attention.rel_pos_w, (H, W), (H, W))
+            attn[:,:-task_num,:-task_num] = add_decomposed_rel_pos(attn[:, :-task_num, :-task_num], q[:, :-task_num, :], self.Attention.rel_pos_h, self.Attention.rel_pos_w, (H, W), (H, W))
 
         attn = attn.softmax(dim=-1)
         # x = (attn @ v).view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = attn @ v
-        x = x[:, :-1, :] #取消掉concate的东西
+        x = x[:, :-task_num, :] #取消掉concate的东西
         x = x.view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = self.Attention.proj(x)
 
@@ -300,7 +301,7 @@ class MaskDecoder_task(nn.Module):
         # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed 
         # 虽然这里self.mask_tokens会因为数量变化了被随机初始化，但仍然加了一个task_specific_embed
         # 表示与前面的关系
-
+        # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed
         output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, self.MaskDecoder.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
@@ -359,7 +360,7 @@ class Sam_task(nn.Module):
         super().__init__()
         # create task_specific embed
         
-        task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight)
+        task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
         nn.init.normal_(task_specific_embed, std=0.02)
         self.task_specific_embed = nn.Parameter(task_specific_embed)
         

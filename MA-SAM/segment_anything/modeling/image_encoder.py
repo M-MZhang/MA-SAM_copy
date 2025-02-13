@@ -263,7 +263,7 @@ class Task_adapter(nn.Module):
     def forward(self, task_embed: torch.Tensor):
         task_adapter_embeddings = []
         for i in range(self.num_layers):
-            task_adapter_embeddings.append(torch.mean(self.task_adapter_mlp_list[i](task_embed),dim=0)) #这里尝试增加task_num数量但是平权
+            task_adapter_embeddings.append(self.task_adapter_mlp_list[i](task_embed)) #这里尝试增加task_num数量但是平权
         
         return task_adapter_embeddings
 
