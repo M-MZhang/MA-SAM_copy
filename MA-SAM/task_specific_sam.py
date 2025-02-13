@@ -301,8 +301,8 @@ class MaskDecoder_task(nn.Module):
         # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed 
         # 虽然这里self.mask_tokens会因为数量变化了被随机初始化，但仍然加了一个task_specific_embed
         # 表示与前面的关系
-        # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed
-        output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, self.MaskDecoder.mask_tokens.weight], dim=0)
+        mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed
+        output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, mask_tokens], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
@@ -363,6 +363,15 @@ class Sam_task(nn.Module):
         task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
         nn.init.normal_(task_specific_embed, std=0.02)
         self.task_specific_embed = nn.Parameter(task_specific_embed)
+        decoder_dim = sam_model.mask_decoder.mask_tokens.weight.shape[1]
+        
+        self.mask_adapter = nn.Sequential(
+                nn.Linear(decoder_dim, decoder_dim//4),
+                nn.GELU(),
+                nn.Linear(decoder_dim//4, decoder_dim),
+                nn.GELU(),
+                nn.Linear(decoder_dim, decoder_dim),
+                )
         
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
             if layer_i in sam_model.image_encoder.global_attn_indexes:
@@ -392,13 +401,14 @@ class Sam_task(nn.Module):
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
             points=None, boxes=None, masks=None,
         ) #[batch, 256, 32, 32]
+        mask_tokens = self.mask_adapter(self.task_specific_embed)
         low_res_masks, iou_predictions = self.sam.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.sam.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            task_specific_embed = self.task_specific_embed,
+            task_specific_embed = mask_tokens,
         )
         masks = self.sam.postprocess_masks(
             low_res_masks,
@@ -419,6 +429,10 @@ class Sam_task(nn.Module):
         for layer in range(layers):
             nn.init.constant_(task_adapter[layer][-1].weight, 0)
             nn.init.constant_(task_adapter[layer][-1].bias, 0)
+        
+        #init the mask_adapter
+        nn.init.constant_(self.mask_adapter[-1].weight,0)
+        nn.init.constant_(self.mask_adapter[-1].bias,0)
 
     def save_parameters(self, filename: str) ->None:
         

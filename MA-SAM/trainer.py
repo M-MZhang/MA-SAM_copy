@@ -108,9 +108,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     
     output_filename = datetime.now().strftime("%Y%m%d-%H%M%S")
     
-    if not os.path.exists('/root/data1/zmm/seg4medicine/save/Vanille_me_v2/training_log'): # 换到外面去存储
-        os.mkdir('/root/data1/zmm/seg4medicine/save/Vanille_me_v2/training_log')
-    logging.basicConfig(filename= '/root/data1/zmm/seg4medicine/save/Vanille_me_v2/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
+    if not os.path.exists('/root/data1/zmm/seg4medicine/save/Vanille_me_v3/training_log'): # 换到外面去存储
+        os.mkdir('/root/data1/zmm/seg4medicine/save/Vanille_me_v3/training_log')
+    logging.basicConfig(filename= '/root/data1/zmm/seg4medicine/save/Vanille_me_v3/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
@@ -136,6 +136,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             num += para.numel()
             # print(name)
         elif "task_adapter" in name:
+            para.requires_grad_(True)
+            num += para.numel()
+        elif "mask_adapter" in name:
             para.requires_grad_(True)
             num += para.numel()
         elif "mask_decoder" in name:
