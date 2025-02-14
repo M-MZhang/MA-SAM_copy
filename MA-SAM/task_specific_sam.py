@@ -301,10 +301,11 @@ class MaskDecoder_task(nn.Module):
         # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed 
         # 虽然这里self.mask_tokens会因为数量变化了被随机初始化，但仍然加了一个task_specific_embed
         # 表示与前面的关系
-        mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed
-        output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, mask_tokens], dim=0)
+        # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed
+        output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, self.MaskDecoder.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
-        tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
+        mask_tokens = task_specific_embed.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        tokens = torch.cat((output_tokens, sparse_prompt_embeddings,mask_tokens), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
@@ -443,6 +444,7 @@ class Sam_task(nn.Module):
         
         task_adapter_tensors = {}
         mask_decoder_tensors = {}
+        mask_adapter_tensors = {}
 
         # save prompt encoder, only `state_dict`, the `named_parameter` is not permitted
         if isinstance(self.sam, torch.nn.DataParallel) or isinstance(self.sam, torch.nn.parallel.DistributedDataParallel):
@@ -458,8 +460,10 @@ class Sam_task(nn.Module):
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key:
                 mask_decoder_tensors[key] = value
+            if 'mask_adapter' in key:
+                mask_decoder_tensors[key] = value
 
-        merged_dict = {**task_embed_tensors, **task_adapter_tensors, **mask_decoder_tensors}
+        merged_dict = {**task_embed_tensors, **task_adapter_tensors, **mask_decoder_tensors, **mask_adapter_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -487,6 +491,12 @@ class Sam_task(nn.Module):
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
+
+        #load mask_adapter
+        mask_adapter_keys = [k for k in sam_keys if 'mask_adapter' in k]
+        mask_adapter_values = [state_dict[k] for k in mask_adapter_keys]
+        mask_adapter_state_dict = {k:v for k,v in zip(mask_adapter_keys, mask_adapter_values)}
+        sam_dict.update(mask_adapter_state_dict)
 
         self.sam.load_state_dict(sam_dict)
 
