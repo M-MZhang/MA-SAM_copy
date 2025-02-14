@@ -239,8 +239,8 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             try:
                 model.save_parameters(save_mode_path)
             except:
-                # model.module.save_parameters(save_mode_path)
-                torch.save(model.module.state_dict(), save_mode_path)
+                model.module.save_parameters(save_mode_path)
+                # torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
@@ -248,8 +248,8 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             try:
                 model.save_parameters(save_mode_path)
             except:
-                # model.module.save_parameters(save_mode_path)
-                torch.save(model.module.state_dict(), save_mode_path)
+                model.module.save_parameters(save_mode_path)
+                # torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
             iterator.close()
             break
