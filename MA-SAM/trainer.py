@@ -138,6 +138,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         elif "u_decoder" in name:
             para.requires_grad_(True)
             num += para.numel()
+        elif "Neck_list" in name:
+            para.requiers_grad_(True)
+            num += para.numel()
         elif "task_adapter" in name:
             para.requires_grad_(True)
             num += para.numel()
