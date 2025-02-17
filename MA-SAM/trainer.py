@@ -108,9 +108,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     
     output_filename = datetime.now().strftime("%Y%m%d-%H%M%S")
     
-    if not os.path.exists('/root/data1/zmm/seg4medicine/save/Vanille_me_v4/training_log'): # 换到外面去存储
-        os.mkdir('/root/data1/zmm/seg4medicine/save/Vanille_me_v4/training_log')
-    logging.basicConfig(filename= '/root/data1/zmm/seg4medicine/save/Vanille_me_v4/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
+    if not os.path.exists(args.output + '/training_log'): # 换到外面去存储
+        os.mkdir(args.output + '/training_log')
+    logging.basicConfig(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
@@ -131,14 +131,14 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     num = 0
     for name, para in model.named_parameters():
         para.requires_grad_(False)
-        if "task_specific_embed" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
+        if "task_specific_embed_list" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
             para.requires_grad_(True)
             num += para.numel()
             # print(name)
         elif "task_adapter" in name:
             para.requires_grad_(True)
             num += para.numel()
-        elif "mask_adapter" in name:
+        elif "mask_adapter_list" in name:
             para.requires_grad_(True)
             num += para.numel()
         elif "mask_decoder" in name:

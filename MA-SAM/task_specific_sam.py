@@ -272,7 +272,7 @@ class MaskDecoder_task(nn.Module):
             multimask_output: bool,
             task_specific_embed: torch.Tensor,
     ):  
-        global_attn_num = image_embeddings.shape[1]  #[n, b, ?, ?, ?]
+        global_attn_num = image_embeddings.shape[0]  #[n, b, ?, ?, ?]
         global_masks = []
         global_iou_pred = []
         for i in range(global_attn_num):
@@ -421,9 +421,11 @@ class Sam_task(nn.Module):
 
         input_images = self.sam.preprocess(batched_input)
 
-        # task_embed preprocess
+        # task_embed preprocess + image_encoder
         task_embed = self.task_adapter(self.task_specific_embed_list)
         image_embeddings = self.sam.image_encoder(input_images, task_embed)
+        
+        # prompt encoder
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
             points=None, boxes=None, masks=None,
         ) #[batch, 256, 32, 32]
@@ -486,13 +488,13 @@ class Sam_task(nn.Module):
         
 
         for key, value in state_dict.items():
-            if 'task_specific_embed' in key:
+            if 'task_specific_embed_list' in key:
                 task_embed_tensors[key] = value
             if 'task_adapter' in key:
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key:
                 mask_decoder_tensors[key] = value
-            if 'mask_adapter' in key:
+            if 'mask_adapter_list' in key:
                 mask_decoder_tensors[key] = value
 
         merged_dict = {**task_embed_tensors, **task_adapter_tensors, **mask_decoder_tensors, **mask_adapter_tensors}
@@ -525,7 +527,7 @@ class Sam_task(nn.Module):
         sam_dict.update(mask_decoder_state_dict)
 
         #load mask_adapter
-        mask_adapter_keys = [k for k in sam_keys if 'mask_adapter' in k]
+        mask_adapter_keys = [k for k in sam_keys if 'mask_adapter_list' in k]
         mask_adapter_values = [state_dict[k] for k in mask_adapter_keys]
         mask_adapter_state_dict = {k:v for k,v in zip(mask_adapter_keys, mask_adapter_values)}
         sam_dict.update(mask_adapter_state_dict)
