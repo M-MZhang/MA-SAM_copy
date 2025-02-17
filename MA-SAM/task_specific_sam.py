@@ -5,7 +5,7 @@ from icecream import ic
 
 from typing import Any, Dict, List, Tuple
 
-from segment_anything.modeling import Sam
+from segment_anything.modeling import Sam, LayerNorm2d, MLPBlock
 
 
 
@@ -146,11 +146,13 @@ class ImageEncoderViT_task(nn.Module):
 
         # for blk in self.blocks:
         #     x = blk(x)
+        outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
             if i in self.ImageEncoderViT.global_attn_indexes:
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
+                outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
             
@@ -276,12 +278,17 @@ class MaskDecoder_task(nn.Module):
         global_masks = []
         global_iou_pred = []
         for i in range(global_attn_num):
+            if i == global_attn_num -1:
+                concat = False
+            else: 
+                concat = True
             masks, iou_pred = self.predict_masks(
                 image_embeddings=image_embeddings[i],
                 image_pe=image_pe,
                 sparse_prompt_embeddings=sparse_prompt_embeddings,
                 dense_prompt_embeddings=dense_prompt_embeddings,
                 task_specific_embed = task_specific_embed[i],
+                concat = concat,  # 决定是否要将task_specific_embed进行concat
             )
             global_masks.append(masks)
             global_iou_pred.append(iou_pred)
@@ -303,6 +310,7 @@ class MaskDecoder_task(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         task_specific_embed: torch.Tensor, # 加入可学习部分
+        concat : bool
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
         # Concatenate output tokens
@@ -313,7 +321,10 @@ class MaskDecoder_task(nn.Module):
         output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, self.MaskDecoder.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         mask_tokens = task_specific_embed.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
-        tokens = torch.cat((output_tokens, sparse_prompt_embeddings,mask_tokens), dim=1)
+        if concat:
+            tokens = torch.cat((output_tokens, sparse_prompt_embeddings,mask_tokens), dim=1)
+        else:
+            tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
         src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
@@ -378,10 +389,32 @@ class Sam_task(nn.Module):
         
         self.task_specific_embed_list = nn.ParameterList()
         self.mask_adapter_list = nn.ModuleList()
+        self.image_neck_list = nn.ModuleList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
             if layer_i in sam_model.image_encoder.global_attn_indexes:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
+
+                # image_encoder_neck
+                neck = nn.Sequential(
+                    nn.Conv2d(
+                        image_encoder_dim,
+                        decoder_dim,
+                        kernel_size=1,
+                        bias=False,
+                    ),
+                    LayerNorm2d(decoder_dim),
+                    nn.Conv2d(
+                        decoder_dim,
+                        decoder_dim,
+                        kernel_size=3,
+                        padding=1,
+                        bias=False,
+                    ),
+                    LayerNorm2d(decoder_dim),
+                )
+                self.image_neck_list.append(neck)
+
 
                 # task_adapter
                 task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
@@ -425,6 +458,10 @@ class Sam_task(nn.Module):
         task_embed = self.task_adapter(self.task_specific_embed_list)
         image_embeddings = self.sam.image_encoder(input_images, task_embed)
         
+        # image_neck process
+        for i in range(self.global_attn_num):
+            image_embeddings[i] = self.image_neck_list(image_embeddings[i])
+
         # prompt encoder
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
             points=None, boxes=None, masks=None,
