@@ -2,11 +2,43 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from icecream import ic
+from typing import Type
 
 from typing import Any, Dict, List, Tuple
 
-from segment_anything.modeling import Sam, LayerNorm2d, MLPBlock
+from segment_anything.modeling import Sam
 
+class MLPBlock(nn.Module):
+    def __init__(
+        self,
+        embedding_dim: int,
+        mlp_dim: int,
+        act: Type[nn.Module] = nn.GELU,
+    ) -> None:
+        super().__init__()
+        self.lin1 = nn.Linear(embedding_dim, mlp_dim)
+        self.lin2 = nn.Linear(mlp_dim, embedding_dim)
+        self.act = act()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.lin2(self.act(self.lin1(x)))
+
+
+# From https://github.com/facebookresearch/detectron2/blob/main/detectron2/layers/batch_norm.py # noqa
+# Itself from https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119  # noqa
+class LayerNorm2d(nn.Module):
+    def __init__(self, num_channels: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(num_channels))
+        self.bias = nn.Parameter(torch.zeros(num_channels))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        u = x.mean(1, keepdim=True)
+        s = (x - u).pow(2).mean(1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.eps)
+        x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        return x
 
 
 def window_partition(x: torch.Tensor, window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
@@ -415,10 +447,13 @@ class Neck(nn.Module):
             self.image_neck_list.append(neck)
         
     def forward(self, image_embeddings):
+        outputs = []
         for i in range(len(self.image_neck_list)):
-            image_embeddings[i] = self.image_neck_list[i](image_embeddings[i])
+            outputs[i].append(self.image_neck_list[i](image_embeddings[i]))
         
-        return image_embeddings
+        outputs.append(image_embeddings[-1])
+        
+        return outputs
 
 
 class Mask_adapter(nn.Module):
