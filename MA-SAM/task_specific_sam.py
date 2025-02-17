@@ -307,33 +307,36 @@ class MaskDecoder_task(nn.Module):
             multimask_output: bool,
             task_specific_embed: torch.Tensor,
     ):  
-        global_attn_num = image_embeddings.shape[0]  #[n, b, ?, ?, ?]
+        global_attn_num = len(image_embeddings-1) #[n, b, ?, ?, ?]
         global_masks = []
         global_iou_pred = []
+
+        # global_attn 对应层
         for i in range(global_attn_num):
-            if i == global_attn_num -1:
-                concat = False
-            else: 
-                concat = True
             masks, iou_pred = self.predict_masks(
                 image_embeddings=image_embeddings[i],
                 image_pe=image_pe,
                 sparse_prompt_embeddings=sparse_prompt_embeddings,
                 dense_prompt_embeddings=dense_prompt_embeddings,
                 task_specific_embed = task_specific_embed[i],
-                concat = concat,  # 决定是否要将task_specific_embed进行concat
+                concat = True,  # 决定是否要将task_specific_embed进行concat
             )
             global_masks.append(masks)
             global_iou_pred.append(iou_pred)
         
-        # if multimask_output:
-        #     mask_slice = slice(1, None)
-        # else:
-        #     mask_slice = slice(0, 1)
-        # masks = masks[:, mask_slice, :, :]
-        # iou_pred = iou_pred[:, mask_slice]
+        # last layer
+        masks, iou_pred = self.predict_masks(
+                image_embeddings=image_embeddings[-1],
+                image_pe=image_pe,
+                sparse_prompt_embeddings=sparse_prompt_embeddings,
+                dense_prompt_embeddings=dense_prompt_embeddings,
+                task_specific_embed = None,
+                concat = False,  # 决定是否要将task_specific_embed进行concat
+        )
 
-        # return masks, iou_pred
+        global_masks.append(masks)
+        global_iou_pred.append(iou_pred)
+        
         return torch.stack(global_masks), torch.stack(global_iou_pred)
 
     def predict_masks(
@@ -353,8 +356,9 @@ class MaskDecoder_task(nn.Module):
         # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed
         output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, self.MaskDecoder.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
-        mask_tokens = task_specific_embed.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        
         if concat:
+            mask_tokens = task_specific_embed.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
             tokens = torch.cat((output_tokens, sparse_prompt_embeddings,mask_tokens), dim=1)
         else:
             tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
@@ -447,13 +451,10 @@ class Neck(nn.Module):
             self.image_neck_list.append(neck)
         
     def forward(self, image_embeddings):
-        outputs = []
         for i in range(len(self.image_neck_list)):
-            outputs[i].append(self.image_neck_list[i](image_embeddings[i]))
+            image_embeddings[i] = self.image_neck_list[i](image_embeddings[i].permute(0, 3, 1, 2))
         
-        outputs.append(image_embeddings[-1])
-        
-        return outputs
+        return image_embeddings
 
 
 class Mask_adapter(nn.Module):
