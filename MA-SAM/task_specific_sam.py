@@ -130,16 +130,17 @@ class ImageEncoderViT_task(nn.Module):
     def __init__(
         self,
         ImageEncoderViT: nn.Module,
+        # task_adapter:nn.Module,
     ) -> None:
         super().__init__()
         self.ImageEncoderViT = ImageEncoderViT
         self.img_size = self.ImageEncoderViT.img_size
         # self.task_adapter = self.task_adapter = Task_adapter(out_chans, embed_dim//4, embed_dim, len(global_attn_indexes))
-    
+        # self.task_adapter = task_adapter
 
     def forward(self, x: torch.Tensor, task_embed: torch.Tensor) -> torch.Tensor:
         x = self.ImageEncoderViT.patch_embed(x)
-        task_adapter_embeddings = self.ImageEncoderViT.task_adapter(task_embed)  #[layers, task_num, dim]
+        # task_adapter_embeddings = self.task_adapter(task_embed)  #[layers, task_num, dim]
         if self.ImageEncoderViT.pos_embed is not None:
             x = x + self.ImageEncoderViT.pos_embed
 
@@ -148,7 +149,7 @@ class ImageEncoderViT_task(nn.Module):
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
             if i in self.ImageEncoderViT.global_attn_indexes:
-                x = self.ImageEncoderViT.blocks[i](x, task_adapter_embeddings[count])
+                x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
@@ -187,7 +188,7 @@ class Task_adapter(nn.Module):
     def forward(self, task_embed: torch.Tensor):
         task_adapter_embeddings = []
         for i in range(self.num_layers):
-            task_adapter_embeddings.append(self.task_adapter_mlp_list[i](task_embed),dim=0) # what if we do not give it mean[task_num, dim]
+            task_adapter_embeddings.append(self.task_adapter_mlp_list[i](task_embed[i]),dim=0) # what if we do not give it mean[task_num, dim]
         
         return task_adapter_embeddings
 
@@ -270,14 +271,20 @@ class MaskDecoder_task(nn.Module):
             dense_prompt_embeddings: torch.Tensor,
             multimask_output: bool,
             task_specific_embed: torch.Tensor,
-    ):
-        masks, iou_pred = self.predict_masks(
-            image_embeddings=image_embeddings,
-            image_pe=image_pe,
-            sparse_prompt_embeddings=sparse_prompt_embeddings,
-            dense_prompt_embeddings=dense_prompt_embeddings,
-            task_specific_embed = task_specific_embed,
-        )
+    ):  
+        global_attn_num = image_embeddings.shape[1]  #[n, b, ?, ?, ?]
+        global_masks = []
+        global_iou_pred = []
+        for i in range(global_attn_num):
+            masks, iou_pred = self.predict_masks(
+                image_embeddings=image_embeddings[i],
+                image_pe=image_pe,
+                sparse_prompt_embeddings=sparse_prompt_embeddings,
+                dense_prompt_embeddings=dense_prompt_embeddings,
+                task_specific_embed = task_specific_embed[i],
+            )
+            global_masks.append(masks)
+            global_iou_pred.append(iou_pred)
         
         # if multimask_output:
         #     mask_slice = slice(1, None)
@@ -286,7 +293,8 @@ class MaskDecoder_task(nn.Module):
         # masks = masks[:, mask_slice, :, :]
         # iou_pred = iou_pred[:, mask_slice]
 
-        return masks, iou_pred
+        # return masks, iou_pred
+        return torch.stack(global_masks), torch.stack(global_iou_pred)
 
     def predict_masks(
         self,
@@ -361,23 +369,37 @@ class Sam_task(nn.Module):
         super().__init__()
         # create task_specific embed
         
-        task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
-        nn.init.normal_(task_specific_embed, std=0.02)
-        self.task_specific_embed = nn.Parameter(task_specific_embed)
+        
         decoder_dim = sam_model.mask_decoder.mask_tokens.weight.shape[1]
+        image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
+        self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
+
+        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         
-        self.mask_adapter = nn.Sequential(
-                nn.Linear(decoder_dim, decoder_dim//4),
-                nn.GELU(),
-                nn.Linear(decoder_dim//4, decoder_dim),
-                nn.GELU(),
-                nn.Linear(decoder_dim, decoder_dim),
-                )
-        
+        self.task_specific_embed_list = nn.ParameterList()
+        self.mask_adapter_list = nn.ModuleList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
             if layer_i in sam_model.image_encoder.global_attn_indexes:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
+
+                # task_adapter
+                task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
+                nn.init.normal_(task_specific_embed, std=0.02)
+                task_specific_embed = nn.Parameter(task_specific_embed)
+                self.task_specific_embed_list.append(task_specific_embed)
+
+                #mask_decoder
+                mask_adapter = nn.Sequential(
+                    nn.Linear(decoder_dim, decoder_dim//4),
+                    nn.GELU(),
+                    nn.Linear(decoder_dim//4, decoder_dim),
+                    nn.GELU(),
+                    nn.Linear(decoder_dim, decoder_dim),
+                )
+                self.mask_adapter_list.append(mask_adapter)
+
+
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder)
         sam_model.mask_decoder = MaskDecoder_task(sam_model.mask_decoder)
         
@@ -398,11 +420,20 @@ class Sam_task(nn.Module):
         batched_input = batched_input.contiguous().view(-1, 3, h, w) #[b, 3, h, w]
 
         input_images = self.sam.preprocess(batched_input)
-        image_embeddings = self.sam.image_encoder(input_images, self.task_specific_embed)
+
+        # task_embed preprocess
+        task_embed = self.task_adapter(self.task_specific_embed_list)
+        image_embeddings = self.sam.image_encoder(input_images, task_embed)
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
             points=None, boxes=None, masks=None,
         ) #[batch, 256, 32, 32]
-        mask_tokens = self.mask_adapter(self.task_specific_embed)
+
+        # hyper_mask_adapter
+        mask_tokens = []
+        for i in range(self.global_attn_num):
+            mask_tokens.append(self.mask_adapter_list[i](self.task_specific_embed_list[i]))
+
+        # mask_tokens = self.mask_adapter(self.task_specific_embed)
         low_res_masks, iou_predictions = self.sam.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.sam.prompt_encoder.get_dense_pe(),
@@ -425,21 +456,22 @@ class Sam_task(nn.Module):
         return outputs
     
     def init_weights(self):
-        task_adapter = self.sam.image_encoder.ImageEncoderViT.task_adapter.task_adapter_mlp_list
+        task_adapter = self.task_adapter.task_adapter_mlp_list
         layers = len(task_adapter)
         for layer in range(layers):
             nn.init.constant_(task_adapter[layer][-1].weight, 0)
             nn.init.constant_(task_adapter[layer][-1].bias, 0)
+            
+            #init the mask_adapter
+            nn.init.constant_(self.mask_adapter_list[layer][-1].weight,0)
+            nn.init.constant_(self.mask_adapter_list[layer][-1].bias,0)
         
-        #init the mask_adapter
-        nn.init.constant_(self.mask_adapter[-1].weight,0)
-        nn.init.constant_(self.mask_adapter[-1].bias,0)
 
     def save_parameters(self, filename: str) ->None:
         
         assert filename.endswith(".pt") or filename.endswith('.pth')
-        num_task = len(self.sam.image_encoder.global_attn_indexes)
-        task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed[i].weight for i in range(num_task)}
+        num_task = self.global_attn_num
+        task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i].weight for i in range(num_task)}
 
         
         task_adapter_tensors = {}
@@ -475,7 +507,7 @@ class Sam_task(nn.Module):
         sam_keys = sam_dict.keys()
 
         # load task_specific_embed
-        for i, task_embed in enumerate(self.task_specific_embed):
+        for i, task_embed in enumerate(self.task_specific_embed_list):
             saved_key = f"task_specific_embed{i:03d}"
             saved_tensor = state_dict[saved_key]
             task_embed.weight = nn.Parameter(saved_tensor)
