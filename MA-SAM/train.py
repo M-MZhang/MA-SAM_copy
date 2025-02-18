@@ -18,7 +18,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3,4,5,6,7"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.1')
+parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.2')
 parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu')
