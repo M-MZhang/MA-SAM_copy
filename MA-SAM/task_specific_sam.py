@@ -307,7 +307,7 @@ class MaskDecoder_task(nn.Module):
             multimask_output: bool,
             task_specific_embed: torch.Tensor,
     ):  
-        global_attn_num = len(image_embeddings) - 1  #[n, b, ?, ?, ?]
+        global_attn_num = len(image_embeddings) - 1  #[n, b, c, h, w]
         global_masks = []
         global_iou_pred = []
 
@@ -574,7 +574,6 @@ class Sam_task(nn.Module):
         image_embeddings = self.sam.image_encoder(input_images, task_embed) #
         image_embeddings = self.Neck_list(image_embeddings)
         
-
         # prompt encoder
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
             points=None, boxes=None, masks=None,
@@ -628,7 +627,7 @@ class Sam_task(nn.Module):
         
         assert filename.endswith(".pt") or filename.endswith('.pth')
         num_task = self.global_attn_num
-        task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i].weight for i in range(num_task)}
+        task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
 
         
         task_adapter_tensors = {}
@@ -638,15 +637,17 @@ class Sam_task(nn.Module):
         mask_adapter_tensors = {}
 
         # save prompt encoder, only `state_dict`, the `named_parameter` is not permitted
-        if isinstance(self.sam, torch.nn.DataParallel) or isinstance(self.sam, torch.nn.parallel.DistributedDataParallel):
-            state_dict = self.sam.module.state_dict()
-        else:
-            state_dict = self.sam.state_dict()
+        # if isinstance(self.sam, torch.nn.DataParallel) or isinstance(self.sam, torch.nn.parallel.DistributedDataParallel):
+        #     state_dict = self.sam.module.state_dict()
+        # else:
+        #     state_dict = self.sam.state_dict()
         
+        if isinstance(self, torch.nn.DataParallel) or isinstance(self, torch.nn.parallel.DistributedDataParallel):
+            self_state_dict = self.module.state_dict()
+        else:
+            self_state_dict = self.state_dict()
 
-        for key, value in state_dict.items():
-            if 'task_specific_embed_list' in key:
-                task_embed_tensors[key] = value
+        for key, value in self_state_dict.items():
             if 'Neck_list' in key:
                 neck_list_tensors[key] = value
             if 'u_decoder' in key:
@@ -656,7 +657,7 @@ class Sam_task(nn.Module):
             if 'mask_decoder' in key:
                 mask_decoder_tensors[key] = value
             if 'mask_adapter' in key:
-                mask_decoder_tensors[key] = value
+                mask_adapter_tensors[key] = value
 
         merged_dict = {**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors, **mask_adapter_tensors}
         torch.save(merged_dict, filename)
@@ -666,14 +667,14 @@ class Sam_task(nn.Module):
         assert filename.endswith(".pt") or filename.endswith('.pth')
 
         state_dict = torch.load(filename)
-        sam_dict = self.sam.state_dict()
+        sam_dict = self.state_dict() #调整为针对self的字典
         sam_keys = sam_dict.keys()
 
         # load task_specific_embed
         for i, task_embed in enumerate(self.task_specific_embed_list):
-            saved_key = f"task_specific_embed{i:03d}"
+            saved_key = f"task_specific_embed_{i:03d}"
             saved_tensor = state_dict[saved_key]
-            task_embed.weight = nn.Parameter(saved_tensor)
+            task_embed = nn.Parameter(saved_tensor)
         
         # load task_adapter
         task_adapter_keys = [k for k in sam_keys if 'task_adapter' in k]
@@ -705,7 +706,7 @@ class Sam_task(nn.Module):
         mask_adapter_state_dict = {k:v for k,v in zip(mask_adapter_keys, mask_adapter_values)}
         sam_dict.update(mask_adapter_state_dict)
 
-        self.sam.load_state_dict(sam_dict)
+        self.load_state_dict(sam_dict)
 
 
 

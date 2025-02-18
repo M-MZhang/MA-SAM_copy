@@ -106,11 +106,13 @@ class LinearWarmupScheduler(_BaseWarmupScheduler):
 def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     from datasets.dataset import dataset_reader, RandomGenerator
     
-    output_filename = datetime.now().strftime("%Y%m%d-%H%M%S")
+   
     
     if not os.path.exists(args.output + '/training_log'): # 换到外面去存储
         os.mkdir(args.output + '/training_log')
-    logging.basicConfig(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
+    # time
+    output_filename = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    logging.basicConfig(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_'+ output_filename + '_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
@@ -126,7 +128,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         random.seed(args.seed + worker_id)
 
     trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
-                             worker_init_fn=worker_init_fn)
+                             worker_init_fn=worker_init_fn, drop_last=True)
     
     num = 0
     for name, para in model.named_parameters():
@@ -195,7 +197,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    # inference(args, multimask_output, model, None)
+    inference(args, multimask_output, model, None)
     
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
@@ -240,7 +242,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
 
         save_interval = 10
         if (epoch_num + 1) % save_interval == 0:
-            # inference(args, multimask_output, model, None)
+            inference(args, multimask_output, model, None)
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
             try:
                 model.save_parameters(save_mode_path)

@@ -29,7 +29,7 @@ HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
 
-os.environ['PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT'] = '1.0'
+# os.environ['PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT'] = '1.0'
 
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
@@ -113,7 +113,7 @@ def inference(args, multimask_output, model, test_save_path=None):
     model.eval()
     metric_list = []
     for data_fd in tqdm(data_fd_list):
-        image_file_path = args.data_path+'/'+'npy/images/'+'img'+str(data_fd)
+        image_file_path = args.data_path +'/npy_new'+'/img'+str(data_fd)+'/images'
         image_file_list = os.listdir(image_file_path)
         image_file_list.sort()
         image_arr_list = []
@@ -121,7 +121,7 @@ def inference(args, multimask_output, model, test_save_path=None):
         for image_file in image_file_list:
             with open(image_file_path + '/' + image_file, 'rb') as file:
                 image_arr = pickle.load(file)
-            with open(args.data_path+'/'+'npy/masks/'+'img'+str(data_fd)+'/'+image_file, 'rb') as file:
+            with open(args.data_path + '/npy_new'+'/img'+str(data_fd)+'/masks/'+image_file, 'rb') as file:
                 mask_arr = pickle.load(file)
 
             image_arr = np.clip(image_arr, HU_min, HU_max)
@@ -175,9 +175,9 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/ft-sam/epoch_99.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.1/epoch_0.pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
-    
+    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.1/test')
     parser.add_argument('--num_classes', type=int, default=12)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     
@@ -188,7 +188,7 @@ if __name__ == '__main__':
     parser.add_argument('--vit_name', type=str, default='vit_b', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
-    parser.add_argument('--module', type=str, default='sam_fact_tt_image_encoder')
+    parser.add_argument('--module', type=str, default='task_specific_sam')
 
     args = parser.parse_args()
 
@@ -203,7 +203,7 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     
-    args.output_dir = args.adapt_ckpt[:-2]
+    args.output_dir = '/'.join(args.adapt_ckpt.split('/')[:-1])+'/test'
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
 
@@ -213,27 +213,27 @@ if __name__ == '__main__':
                                                                     checkpoint=args.ckpt, pixel_mean=[0., 0., 0.],
                                                                 pixel_std=[1., 1., 1.])
     
-    # pkg = import_module(args.module)
-    # net = pkg.Fact_tt_Sam(sam, args.rank, s=args.scale).cuda()
-    net = sam.cuda()
+    pkg = import_module(args.module)
+    net = pkg.Sam_task(sam).cuda() 
+    # net = sam.cuda()
 
     assert args.adapt_ckpt is not None
-    # net.load_parameters(args.adapt_ckpt)
-    state_dict = torch.load(args.adapt_ckpt)
-    net.load_state_dict(state_dict)
+    net.load_parameters(args.adapt_ckpt)
+    # state_dict = torch.load(args.adapt_ckpt)
+    # net.load_state_dict(state_dict)
 
     if args.num_classes > 1:
         multimask_output = True
     else:
         multimask_output = False
 
-    # initialize log
-    log_folder = os.path.join(args.output_dir, 'test_log')
-    os.makedirs(log_folder, exist_ok=True)
-    
-    if not os.path.exists('./testing_log'):
-        os.mkdir('./testing_log')
-    logging.basicConfig(filename= './testing_log/' + args.adapt_ckpt.split('/')[-2] + '_log.txt', level=logging.INFO,
+    # initialize log_folder
+    log_folder = os.path.join(args.output_dir, 'testing_log')
+    if not os.path.exists(log_folder):
+        os.mkdir(log_folder)
+    # time
+    output_filename = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    logging.basicConfig(filename= log_folder + '/testing_log/' +args.adapt_ckpt.split('/')[-2] + '_' + output_filename +'_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
