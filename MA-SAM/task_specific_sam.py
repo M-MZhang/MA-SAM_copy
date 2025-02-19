@@ -178,21 +178,24 @@ class ImageEncoderViT_task(nn.Module):
 
         # for blk in self.blocks:
         #     x = blk(x)
-        outputs = []
+        # prompts = []
+        image_embeddings = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
             if i in self.ImageEncoderViT.global_attn_indexes:
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
-                outputs.append(x)
+                # prompts.append(prompt)
+                image_embeddings.append(x)
             else:
-                x = self.ImageEncoderViT.blocks[i](x) 
+                x = self.ImageEncoderViT.blocks[i](x)
+            
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
-        outputs.append(x) # save the last layer's output
+        image_embeddings.append(x) # save the last layer's output
 
-        return outputs
+        return image_embeddings
 
 class Task_adapter(nn.Module):
 
@@ -211,11 +214,9 @@ class Task_adapter(nn.Module):
         self.task_adapter_mlp_list = nn.ModuleList()
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
-                nn.Linear(input_dim, output_dim//4),
+                nn.Linear(input_dim, input_dim//2),
                 nn.GELU(),
-                nn.Linear(output_dim//4, output_dim//4),
-                nn.GELU(),
-                nn.Linear(output_dim//4, output_dim),
+                nn.Linear(input_dim//2, output_dim), #[768//4, 256]
                 nn.GELU(),
                 nn.Linear(output_dim, output_dim) #增加一项全连接层
             ))
@@ -284,6 +285,7 @@ class Attention_task(nn.Module):
         attn = attn.softmax(dim=-1)
         # x = (attn @ v).view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = attn @ v
+        # prompt = x[:, -task_num:, :].view(B, self.Attention.num_heads, task_num, -1).permute(0, 2, 1, 3).reshape(B, task_num, -1)
         x = x[:, :-task_num, :] #取消掉concate的东西
         x = x.view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = self.Attention.proj(x)
@@ -397,9 +399,7 @@ class MaskDecoder_task(nn.Module):
     #         self,
     #         mask_tokens_out
     # ):
-        
-
-    
+         
 class U_decoder(nn.Module):
     def __init__(
             self,
@@ -477,7 +477,6 @@ class Neck(nn.Module):
         
         return image_embeddings
 
-
 class Mask_adapter(nn.Module):
     def __init__(self, decoder_dim, global_attn_num):
         super().__init__()
@@ -530,11 +529,12 @@ class Sam_task(nn.Module):
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
+        task_num = sam_model.mask_decoder.num_mask_tokens
 
-        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
+        self.task_adapter = Task_adapter(image_encoder_dim, image_encoder_dim//4, decoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
         self.u_decoder = U_decoder(image_size, self.global_attn_num)
-        self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
+        # self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
@@ -543,7 +543,7 @@ class Sam_task(nn.Module):
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
                 # task_specific_embed
-                task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
+                task_specific_embed = torch.empty(task_num, image_encoder_dim) #[task_num, decoder_embed]
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
@@ -570,8 +570,8 @@ class Sam_task(nn.Module):
         input_images = self.sam.preprocess(batched_input)
 
         # task_embed preprocess + image_encoder
-        task_embed = self.task_adapter(self.task_specific_embed_list)
-        image_embeddings = self.sam.image_encoder(input_images, task_embed) #
+        # task_embed = self.task_adapter(self.task_specific_embed_list)
+        image_embeddings = self.sam.image_encoder(input_images, self.task_specific_embed_list) #
         image_embeddings = self.Neck_list(image_embeddings)
         
         # prompt encoder
@@ -580,16 +580,16 @@ class Sam_task(nn.Module):
         ) #[batch, 256, 32, 32]
 
         # hyper_mask_adapter
-        mask_tokens = self.mask_adapter(self.task_specific_embed_list)
+        # mask_tokens = self.mask_adapter(self.task_specific_embed_list)
+        prompts = self.task_adapter(self.task_specific_embed_list)
 
-        # mask_tokens = self.mask_adapter(self.task_specific_embed)
         low_res_masks, iou_predictions = self.sam.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.sam.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            task_specific_embed = mask_tokens,
+            task_specific_embed = prompts,
         )
 
         # u-type postprocess
@@ -612,15 +612,15 @@ class Sam_task(nn.Module):
     
     def init_weights(self):
         task_adapter = self.task_adapter.task_adapter_mlp_list
-        mask_adapter = self.mask_adapter.mask_adapter_list
+        # mask_adapter = self.mask_adapter.mask_adapter_list
         layers = len(task_adapter)
         for layer in range(layers):
             nn.init.constant_(task_adapter[layer][-1].weight, 0)
             nn.init.constant_(task_adapter[layer][-1].bias, 0)
             
             #init the mask_adapter
-            nn.init.constant_(mask_adapter[layer][-1].weight,0)
-            nn.init.constant_(mask_adapter[layer][-1].bias,0)
+            # nn.init.constant_(mask_adapter[layer][-1].weight,0)
+            # nn.init.constant_(mask_adapter[layer][-1].bias,0)
         
 
     def save_parameters(self, filename: str) ->None:
