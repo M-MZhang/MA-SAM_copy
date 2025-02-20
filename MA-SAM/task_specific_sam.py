@@ -400,25 +400,13 @@ class MaskDecoder_task(nn.Module):
     #         mask_tokens_out
     # ):
          
-class U_decoder(nn.Module):
+class UM_decoder(nn.Module):
     def __init__(
             self,
             output_dim : int,
             global_attn_num : int
     ):
         super().__init__()
-        
-        # self.u_fusion_list = nn.ModuleList()
-        # for i in range(global_attn_num):
-        #     u_fusion = nn.Sequential(
-        #             nn.Conv2d(
-        #                 output_dim * 2,
-        #                 output_dim,
-        #                 kernel_size=1,
-        #                 bias=False,
-        #             ),
-        #             LayerNorm2d(output_dim))
-        #     self.u_fusion_list.append(u_fusion)
         self.u_fusion_list = nn.Sequential(
                     nn.Conv2d(
                         global_attn_num+1,
@@ -430,13 +418,7 @@ class U_decoder(nn.Module):
                     )
     
     def forward(self, decoder_embeddings):
-        # for i in range(len(self.u_fusion_list)):
-        #     if i == 0:
-        #         raw = torch.concat([decoder_embeddings[i], decoder_embeddings[i+1]], dim=-1)
-        #     else:
-        #         raw = torch.concat([raw, decoder_embeddings[i+1]], dim = -1)
-
-        #     raw = self.u_fusion_list[i](raw.permute(0, 3, 1, 2))
+      
         # decoder_embeddings [global_num+1, b, task_num, 512, 512]
         layer_num, b, task_num, h, w = decoder_embeddings.shape
         re_decoder_embeddings = torch.einsum('l b t h w -> b t l h w', decoder_embeddings)
@@ -445,6 +427,34 @@ class U_decoder(nn.Module):
         masks = masks.squeeze(2)
 
         return masks
+
+class UI_decoder(nn.Module):
+    def __init__(
+            self,
+            output_dim : int,
+            global_attn_num : int
+    ):
+        super().__init__()
+        self.u_fusion_list = nn.ModuleList()
+        for i in range(global_attn_num):
+            u_fusion = nn.Sequential(
+                    nn.Conv2d(
+                        output_dim * 2,
+                        output_dim,
+                        kernel_size=1,
+                        bias=False,
+                    ),
+                    LayerNorm2d(output_dim))
+            self.u_fusion_list.append(u_fusion)
+    
+    def forward(self, decoder_embeddings):
+        for i in range(len(self.u_fusion_list)):
+            raw = torch.concat([decoder_embeddings[-(i+1)], decoder_embeddings[-(i+2)]], dim=1)
+            decoder_embeddings[-(i+2)] = self.u_fusion_list[i](raw)
+        
+        return decoder_embeddings
+
+            
 
 class Neck(nn.Module):
     def __init__(self, image_encoder_dim, decoder_dim, global_attn_num ):
@@ -533,7 +543,8 @@ class Sam_task(nn.Module):
 
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.u_decoder = U_decoder(image_size, self.global_attn_num)
+        self.u_decoder = UM_decoder(image_size, self.global_attn_num)
+        self.image_u = UI_decoder(decoder_dim, global_attn_num=self.global_attn_num)
         # self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
@@ -573,6 +584,7 @@ class Sam_task(nn.Module):
         task_embed = self.task_adapter(self.task_specific_embed_list)
         image_embeddings = self.sam.image_encoder(input_images, task_embed) #
         image_embeddings = self.Neck_list(image_embeddings)
+        image_embeddings = self.image_u(image_embeddings) 
         
         # prompt encoder
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
@@ -630,7 +642,7 @@ class Sam_task(nn.Module):
         neck_list_tensors = {}
         u_decoder_tensors = {}
         mask_decoder_tensors = {}
-        mask_adapter_tensors = {}
+        image_u_tensors = {}
 
         # save prompt encoder, only `state_dict`, the `named_parameter` is not permitted
         # if isinstance(self.sam, torch.nn.DataParallel) or isinstance(self.sam, torch.nn.parallel.DistributedDataParallel):
@@ -652,10 +664,10 @@ class Sam_task(nn.Module):
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key:
                 mask_decoder_tensors[key] = value
-            if 'mask_adapter' in key:
-                mask_adapter_tensors[key] = value
+            if 'image_u' in key:
+                image_u_tensors[key] = value
 
-        merged_dict = {**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors, **mask_adapter_tensors}
+        merged_dict = {**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors, **image_u_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -696,11 +708,11 @@ class Sam_task(nn.Module):
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
 
-        #load mask_adapter
-        mask_adapter_keys = [k for k in sam_keys if 'mask_adapter' in k]
-        mask_adapter_values = [state_dict[k] for k in mask_adapter_keys]
-        mask_adapter_state_dict = {k:v for k,v in zip(mask_adapter_keys, mask_adapter_values)}
-        sam_dict.update(mask_adapter_state_dict)
+        #load image_u
+        image_u_keys = [k for k in sam_keys if 'image_u' in k]
+        image_u_values = [state_dict[k] for k in image_u_keys]
+        image_u_state_dict = {k:v for k,v in zip(image_u_keys, image_u_values)}
+        sam_dict.update(image_u_state_dict)
 
         self.load_state_dict(sam_dict)
 
