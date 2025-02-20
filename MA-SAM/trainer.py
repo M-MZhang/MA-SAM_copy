@@ -137,7 +137,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             para.requires_grad_(True)
             num += para.numel()
         elif 'mask_task_embed_list' in name:
-            para.requiers_grad_(True)
+            para.requires_grad_(True)
             num += para.numel()
             # print(name)
         elif "u_decoder" in name:
@@ -200,7 +200,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    inference(args, multimask_output, model, None)
+    # inference(args, multimask_output, model, None)
     
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):

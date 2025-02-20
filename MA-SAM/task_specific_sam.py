@@ -531,7 +531,7 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
 
-        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
+        self.task_adapter = Task_adapter(image_encoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
         self.u_decoder = U_decoder(image_size, self.global_attn_num)
         self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
@@ -586,7 +586,7 @@ class Sam_task(nn.Module):
         ) #[batch, 256, 32, 32]
 
         # hyper_mask_adapter
-        mask_tokens = self.mask_adapter(self.mask_task)
+        mask_tokens = self.mask_adapter(self.mask_task_embed_list)
 
         # mask_tokens = self.mask_adapter(self.task_specific_embed)
         low_res_masks, iou_predictions = self.sam.mask_decoder(
