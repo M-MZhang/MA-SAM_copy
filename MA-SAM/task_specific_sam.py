@@ -544,7 +544,7 @@ class Sam_task(nn.Module):
 
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.u_decoder = U_decoder(image_size, self.global_attn_num)
+        self.u_decoder = U_decoder(decoder_dim, self.global_attn_num)
         # self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
@@ -605,10 +605,10 @@ class Sam_task(nn.Module):
             task_specific_embed = self.task_specific_embed_list,
         )
 
-        # u-type postprocess
-        low_res_masks = self.u_decoder(
-            decoder_embeddings = low_res_masks
-        )
+        # # u-type postprocess
+        # low_res_masks = self.u_decoder(
+        #     decoder_embeddings = low_res_masks
+        # )
 
         masks = self.sam.postprocess_masks(
             low_res_masks,
