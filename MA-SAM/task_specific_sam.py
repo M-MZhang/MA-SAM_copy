@@ -536,17 +536,23 @@ class Sam_task(nn.Module):
         self.u_decoder = U_decoder(image_size, self.global_attn_num)
         self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
         
-        self.task_specific_embed_list = nn.ParameterList()
+        self.image_task_embed_list = nn.ParameterList()
+        self.mask_task_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
             if layer_i in sam_model.image_encoder.global_attn_indexes:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
                 # task_specific_embed
-                task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
-                nn.init.normal_(task_specific_embed, std=0.02)
-                task_specific_embed = nn.Parameter(task_specific_embed)
-                self.task_specific_embed_list.append(task_specific_embed)
+                image_task_embed = torch.empty(sam_model.mask_decoder.num_mask_tokens, image_encoder_dim) #[task_num, decoder_embed]
+                nn.init.normal_(image_task_embed, std=0.02)
+                image_task_embed = nn.Parameter(image_task_embed)
+                self.image_task_embed_list.append(image_task_embed)
+
+                # mask_task_embed
+                mask_task_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight)
+                nn.init.normal_(mask_task_embed,std=0.02)
+                self.mask_task_embed_list.append(mask_task_embed)
 
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder)
         sam_model.mask_decoder = MaskDecoder_task(sam_model.mask_decoder)
@@ -570,7 +576,7 @@ class Sam_task(nn.Module):
         input_images = self.sam.preprocess(batched_input)
 
         # task_embed preprocess + image_encoder
-        task_embed = self.task_adapter(self.task_specific_embed_list)
+        task_embed = self.task_adapter(self.image_task_embed_list)
         image_embeddings = self.sam.image_encoder(input_images, task_embed) #
         image_embeddings = self.Neck_list(image_embeddings)
         
@@ -580,7 +586,7 @@ class Sam_task(nn.Module):
         ) #[batch, 256, 32, 32]
 
         # hyper_mask_adapter
-        mask_tokens = self.mask_adapter(self.task_specific_embed_list)
+        mask_tokens = self.mask_adapter(self.mask_task)
 
         # mask_tokens = self.mask_adapter(self.task_specific_embed)
         low_res_masks, iou_predictions = self.sam.mask_decoder(
@@ -627,7 +633,8 @@ class Sam_task(nn.Module):
         
         assert filename.endswith(".pt") or filename.endswith('.pth')
         num_task = self.global_attn_num
-        task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
+        image_task_embed_tensors = {f"image_task_embed_{i:03d}": self.image_task_embed_list[i] for i in range(num_task)}
+        mask_task_embed_tensors = {f'mask_task_embed_{i:03d}':self.mask_task_embed_list[i] for i in range(num_task)}
 
         
         task_adapter_tensors = {}
@@ -659,7 +666,7 @@ class Sam_task(nn.Module):
             if 'mask_adapter' in key:
                 mask_adapter_tensors[key] = value
 
-        merged_dict = {**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors, **mask_adapter_tensors}
+        merged_dict = {**image_task_embed_tensors, **mask_task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors, **mask_adapter_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -670,11 +677,18 @@ class Sam_task(nn.Module):
         sam_dict = self.state_dict() #调整为针对self的字典
         sam_keys = sam_dict.keys()
 
-        # load task_specific_embed
-        for i, task_embed in enumerate(self.task_specific_embed_list):
-            saved_key = f"task_specific_embed_{i:03d}"
+        # load image_task_embed
+        for i, task_embed in enumerate(self.image_task_embed_list):
+            saved_key = f"image_task_embed_{i:03d}"
             saved_tensor = state_dict[saved_key]
             task_embed = nn.Parameter(saved_tensor)
+
+        # load mask_task_embed
+        for i, task_embed in enumerate(self.mask_task_embed_list):
+            saved_key = f"mask_task_embed_{i:03d}"
+            saved_tensor = state_dict[saved_key]
+            task_embed = nn.Parameter(saved_tensor)
+        
         
         # load task_adapter
         task_adapter_keys = [k for k in sam_keys if 'task_adapter' in k]

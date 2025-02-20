@@ -133,8 +133,11 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     num = 0
     for name, para in model.named_parameters():
         para.requires_grad_(False)
-        if "task_specific_embed_list" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
+        if "image_task_embed_list" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
             para.requires_grad_(True)
+            num += para.numel()
+        elif 'mask_task_embed_list' in name:
+            para.requiers_grad_(True)
             num += para.numel()
             # print(name)
         elif "u_decoder" in name:
