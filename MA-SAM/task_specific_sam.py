@@ -625,7 +625,7 @@ class Sam_task(nn.Module):
                 self.task_specific_embed_list.append(task_specific_embed)
 
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder)
-        sam_model.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim, TwoWayTransformer, self.image_u, self.mask_tokens_u)
+        sam_model.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim, self.image_u, self.mask_tokens_u)
         
         self.sam = sam_model
         self.init_weights() 

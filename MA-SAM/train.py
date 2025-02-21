@@ -17,11 +17,11 @@ import os
 # os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3,4,5,6,7"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.10')
-parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
+parser.add_argument('--root_path', type=str, default='/Users/zmm/Desktop/国科大-自动化所/seg4medicine/RawData/Training', help='root dir for data')
+parser.add_argument('--output', type=str, default='/Users/zmm/Desktop/国科大-自动化所/seg4medicine/save')
+parser.add_argument('--data_path', type=str, default='/Users/zmm/Desktop/国科大-自动化所/seg4medicine/RawData/Training')
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
-parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu')
+parser.add_argument('--batch_size', type=int, default=2, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=0, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0002, help='segmentation network learning rate')
 
@@ -31,9 +31,9 @@ parser.add_argument('--stop_epoch', type=int, default=500, help='maximum epoch n
 parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
 parser.add_argument('--img_size', type=int, default=512, help='input patch size of network input')
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
-parser.add_argument('--vit_name', type=str, default='vit_h', help='select one vit model')
-parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
-parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.10/epoch_9.pth', help='Finetuned checkpoint')
+parser.add_argument('--vit_name', type=str, default='vit_b', help='select one vit model')
+parser.add_argument('--ckpt', type=str, default='/Users/zmm/Desktop/国科大-自动化所/seg4medicine/pretrained/sam_vit_b_01ec64.pth', help='Pretrained checkpoint')
+parser.add_argument('--adapt_ckpt', type=str, default=None, help='Finetuned checkpoint')
 parser.add_argument('--rank', type=int, default=32, help='Rank for FacT')
 parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')
 parser.add_argument('--warmup', action='store_true', help='If activated, warp up the learning from a lower lr to the base_lr')
@@ -83,7 +83,8 @@ if __name__ == "__main__":
                                                                 pixel_std=[1., 1., 1.])
 
     pkg = import_module(args.module)
-    net = pkg.Sam_task(sam).cuda() 
+    net = pkg.Sam_task(sam).cuda()
+    # net = pkg.Sam_task(sam) 
     # net = sam.cuda()
     if args.compile:
         net = torch.compile(net)
