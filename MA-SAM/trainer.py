@@ -171,7 +171,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     else:
         b_lr = base_lr
     if args.AdamW:
-        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.01)
+        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.1)
     else:
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
     if args.use_amp:
