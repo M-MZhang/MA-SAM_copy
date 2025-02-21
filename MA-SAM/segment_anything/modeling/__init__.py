@@ -10,3 +10,4 @@ from .mask_decoder import MaskDecoder
 from .prompt_encoder import PromptEncoder, PromptEncoder_task
 from .transformer import TwoWayTransformer
 from .common import LayerNorm2d, MLPBlock
+from .transformer import TwoWayTransformer

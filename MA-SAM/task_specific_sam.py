@@ -6,7 +6,8 @@ from typing import Type
 
 from typing import Any, Dict, List, Tuple
 
-from segment_anything.modeling import Sam
+from segment_anything.modeling import Sam, TwoWayTransformer
+
 
 class MLPBlock(nn.Module):
     def __init__(
@@ -241,8 +242,10 @@ class Task_adapter(nn.Module):
                 nn.GELU(),
                 nn.Linear(output_dim//4, output_dim),
                 nn.GELU(),
-                nn.Linear(output_dim, output_dim) #增加一项全连接层
-            ))
+                nn.Linear(output_dim, output_dim), #增加一项全连接层
+                # nn.LayerNorm(output_dim) # 增加layernorm
+                ) 
+            )
     
     def forward(self, task_embed: torch.Tensor):
         task_adapter_embeddings = []
@@ -320,11 +323,16 @@ class MaskDecoder_task(nn.Module):
             MaskDecoder: nn.Module,
             num_layer: int,
             transformer_dim: int,
+            transformer: nn.Module,
     ):
         super().__init__()
         self.MaskDecoder = MaskDecoder
         self.output_upsacling_list = nn.ModuleList()
         self.output_hypernetworks_mlps_list = nn.ModuleList()
+        self.transformer_list = nn.ModuleList()
+        self.iou_tokens_list = nn.ParameterList()
+        self.mask_tokens_list = nn.ParameterList()
+
         for i in range(num_layer+1):
             output_upscaling = nn.Sequential(
                 nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
@@ -348,6 +356,17 @@ class MaskDecoder_task(nn.Module):
                 ]
             )   
             self.output_hypernetworks_mlps_list.append(output_hypernetworks_mlps)
+
+            n_transformer = TwoWayTransformer(
+                depth=2,
+                embedding_dim=transformer_dim,
+                mlp_dim=2048,
+                num_heads=8,
+            )
+            
+            self.transformer_list.append(n_transformer)
+            self.iou_tokens_list.append(nn.Embedding(1, transformer_dim))
+            self.mask_tokens_list.append(nn.Embedding(self.MaskDecoder.num_mask_tokens, transformer_dim))
 
     
     def forward(
@@ -409,7 +428,7 @@ class MaskDecoder_task(nn.Module):
         # 虽然这里self.mask_tokens会因为数量变化了被随机初始化，但仍然加了一个task_specific_embed
         # 表示与前面的关系
         # mask_tokens = self.MaskDecoder.mask_tokens.weight + task_specific_embed
-        output_tokens = torch.cat([self.MaskDecoder.iou_token.weight, self.MaskDecoder.mask_tokens.weight], dim=0)
+        output_tokens = torch.cat([self.iou_tokens_list[index].weight, self.mask_tokens_list[index].weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         
         if concat:
@@ -425,7 +444,7 @@ class MaskDecoder_task(nn.Module):
         b, c, h, w = src.shape
 
         # Run the transformer
-        hs, src = self.MaskDecoder.transformer(src, pos_src, tokens)
+        hs, src = self.transformer_list[index](src, pos_src, tokens)
         iou_token_out = hs[:, 0, :]
         mask_tokens_out = hs[:, 1 : (1 + self.MaskDecoder.num_mask_tokens), :]
 
@@ -545,6 +564,7 @@ class Mask_adapter(nn.Module):
                 nn.Linear(decoder_dim//4, decoder_dim),
                 nn.GELU(),
                 nn.Linear(decoder_dim, decoder_dim),
+                # nn.LayerNorm(decoder_dim),
             )
             self.mask_adapter_list.append(mask_adapter)
     
@@ -604,7 +624,7 @@ class Sam_task(nn.Module):
                 self.task_specific_embed_list.append(task_specific_embed)
 
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder)
-        sam_model.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
+        sam_model.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim, transformer=TwoWayTransformer)
         
         self.sam = sam_model
         self.init_weights() 
