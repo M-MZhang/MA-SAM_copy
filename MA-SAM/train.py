@@ -21,7 +21,7 @@ parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medici
 parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.12')
 parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
-parser.add_argument('--batch_size', type=int, default=4, help='batch_size per gpu')
+parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=8, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0002, help='segmentation network learning rate')
 

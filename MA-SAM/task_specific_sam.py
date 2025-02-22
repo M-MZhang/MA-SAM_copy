@@ -206,7 +206,7 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.ImageEncoderViT.global_attn_indexes or i == 0:
+            if (i in self.ImageEncoderViT.global_attn_indexes) or (i == 0):
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
@@ -529,6 +529,8 @@ class up_scaling(nn.Module):
     def forward(self, image_embeddings):
         for i, layer in enumerate(self.up_list):
             image_embeddings[i] = self.up_list[i](image_embeddings[i])
+        
+        return image_embeddings
 
 class down_proj(nn.Module):
     def __init__(
