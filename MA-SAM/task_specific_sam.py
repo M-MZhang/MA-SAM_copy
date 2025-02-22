@@ -394,7 +394,7 @@ class MaskDecoder_task(nn.Module):
                     dense_prompt_embeddings=dense_prompt_embeddings,
                     task_specific_embed = None,
                     concat = False,  # 决定是否要将task_specific_embed进行concat
-                    index = -1,
+                    index = i,
                     )
             else:
                 masks, iou_pred = self.predict_masks(
