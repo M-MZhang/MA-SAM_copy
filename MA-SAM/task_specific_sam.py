@@ -206,12 +206,14 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.ImageEncoderViT.global_attn_indexes or i == 0:
+            if i in self.ImageEncoderViT.global_attn_indexes :
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
+                if i == 0:
+                    outputs.append(x)
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
@@ -384,31 +386,29 @@ class MaskDecoder_task(nn.Module):
 
         # global_attn 对应层
         for i in range(global_attn_num):
-            masks, iou_pred = self.predict_masks(
-                image_embeddings=image_embeddings[i],
-                image_pe=image_pe,
-                sparse_prompt_embeddings=sparse_prompt_embeddings,
-                dense_prompt_embeddings=dense_prompt_embeddings,
-                task_specific_embed = task_specific_embed[i],
-                concat = True,  # 决定是否要将task_specific_embed进行concat
-                index=i,
-            )
+            if i == 0:
+                masks, iou_pred = self.predict_masks(
+                    image_embeddings=image_embeddings[-1],
+                    image_pe=image_pe,
+                    sparse_prompt_embeddings=sparse_prompt_embeddings,
+                    dense_prompt_embeddings=dense_prompt_embeddings,
+                    task_specific_embed = None,
+                    concat = False,  # 决定是否要将task_specific_embed进行concat
+                    index = -1,
+                    )
+            else:
+                masks, iou_pred = self.predict_masks(
+                    image_embeddings=image_embeddings[i],
+                    image_pe=image_pe,
+                    sparse_prompt_embeddings=sparse_prompt_embeddings,
+                    dense_prompt_embeddings=dense_prompt_embeddings,
+                    task_specific_embed = task_specific_embed[i],
+                    concat = True,  # 决定是否要将task_specific_embed进行concat
+                    index=i,
+                )
             global_masks.append(masks)
             global_iou_pred.append(iou_pred)
         
-        # # last layer
-        # masks, iou_pred = self.predict_masks(
-        #         image_embeddings=image_embeddings[-1],
-        #         image_pe=image_pe,
-        #         sparse_prompt_embeddings=sparse_prompt_embeddings,
-        #         dense_prompt_embeddings=dense_prompt_embeddings,
-        #         task_specific_embed = None,
-        #         concat = False,  # 决定是否要将task_specific_embed进行concat
-        #         index = -1,
-        # )
-
-        # global_masks.append(masks) #[global_attn_num+1, b, task_num, output_size, output_size]
-        # global_iou_pred.append(iou_pred)
         
         return torch.stack(global_masks), torch.stack(global_iou_pred)
 
@@ -481,18 +481,6 @@ class U_decoder(nn.Module):
             global_attn_num : int
     ):
         super().__init__()
-        
-        # self.u_fusion_list = nn.ModuleList()
-        # for i in range(global_attn_num):
-        #     u_fusion = nn.Sequential(
-        #             nn.Conv2d(
-        #                 output_dim * 2,
-        #                 output_dim,
-        #                 kernel_size=1,
-        #                 bias=False,
-        #             ),
-        #             LayerNorm2d(output_dim))
-        #     self.u_fusion_list.append(u_fusion)
         self.u_fusion_list = nn.Sequential(
                     nn.Conv2d(
                         global_attn_num+1,
@@ -504,14 +492,6 @@ class U_decoder(nn.Module):
                     )
     
     def forward(self, decoder_embeddings):
-        # for i in range(len(self.u_fusion_list)):
-        #     if i == 0:
-        #         raw = torch.concat([decoder_embeddings[i], decoder_embeddings[i+1]], dim=-1)
-        #     else:
-        #         raw = torch.concat([raw, decoder_embeddings[i+1]], dim = -1)
-
-        #     raw = self.u_fusion_list[i](raw.permute(0, 3, 1, 2))
-        # decoder_embeddings [global_num+1, b, task_num, 512, 512]
         layer_num, b, task_num, h, w = decoder_embeddings.shape
         re_decoder_embeddings = torch.einsum('l b t h w -> b t l h w', decoder_embeddings)
         masks = self.u_fusion_list(re_decoder_embeddings.view(b*task_num, layer_num, h, w)) 
@@ -525,7 +505,7 @@ class Neck(nn.Module):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
-        for i in range(global_attn_num+1):
+        for i in range(global_attn_num):
             neck = nn.Sequential(
                 nn.Conv2d(
                     image_encoder_dim,
@@ -557,7 +537,7 @@ class Mask_adapter(nn.Module):
         super().__init__()
         #mask_decoder
         self.mask_adapter_list = nn.ModuleList()
-        for i in range(global_attn_num+1):
+        for i in range(global_attn_num):
             mask_adapter = nn.Sequential(
                 nn.Linear(decoder_dim, decoder_dim//4),
                 nn.GELU(),
