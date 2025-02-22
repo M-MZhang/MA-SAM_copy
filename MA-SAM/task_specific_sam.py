@@ -237,12 +237,13 @@ class Task_adapter(nn.Module):
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
                 nn.Linear(input_dim, output_dim//4),
+                
                 nn.GELU(),
                 nn.Linear(output_dim//4, output_dim//4),
                 nn.GELU(),
                 nn.Linear(output_dim//4, output_dim),
-                nn.GELU(),
-                nn.Linear(output_dim, output_dim), #增加一项全连接层
+                # nn.GELU(),
+                # nn.Linear(output_dim, output_dim), #增加一项全连接层
                 # nn.LayerNorm(output_dim) # 增加layernorm
                 ) 
             )
@@ -703,7 +704,7 @@ class Sam_task(nn.Module):
         self.up_scaling = up_scaling(decoder_dim)
         self.down_proj = down_proj(decoder_dim)
 
-        self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num+1)
+        # self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num+1)
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
@@ -755,7 +756,7 @@ class Sam_task(nn.Module):
         ) #[batch, 256, 32, 32]
 
         # hyper_mask_adapter
-        mask_tokens = self.mask_adapter(self.task_specific_embed_list)
+        # mask_tokens = self.mask_adapter(self.task_specific_embed_list)
 
         # mask_tokens = self.mask_adapter(self.task_specific_embed)
         low_res_masks, iou_predictions = self.sam.mask_decoder(
@@ -764,7 +765,7 @@ class Sam_task(nn.Module):
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            task_specific_embed = mask_tokens,
+            task_specific_embed = self.task_specific_embed_list,
         )
 
         # u-type postprocess
@@ -787,15 +788,15 @@ class Sam_task(nn.Module):
     
     def init_weights(self):
         task_adapter = self.task_adapter.task_adapter_mlp_list
-        mask_adapter = self.mask_adapter.mask_adapter_list
+        # mask_adapter = self.mask_adapter.mask_adapter_list
         layers = len(task_adapter)
         for layer in range(layers):
             nn.init.constant_(task_adapter[layer][-1].weight, 0)
             nn.init.constant_(task_adapter[layer][-1].bias, 0)
             
             #init the mask_adapter
-            nn.init.constant_(mask_adapter[layer][-1].weight,0)
-            nn.init.constant_(mask_adapter[layer][-1].bias,0)
+            # nn.init.constant_(mask_adapter[layer][-1].weight,0)
+            # nn.init.constant_(mask_adapter[layer][-1].bias,0)
         
 
     def save_parameters(self, filename: str) ->None:
