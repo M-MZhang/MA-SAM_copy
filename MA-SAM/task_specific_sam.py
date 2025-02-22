@@ -233,7 +233,7 @@ class Task_adapter(nn.Module):
     ) -> None:
         
         super().__init__()
-        self.num_layers = num_layers + 1
+        self.num_layers = num_layers
         # h = [hidden_dim] * (num_layers - 1)
         self.task_adapter_mlp_list = nn.ModuleList()
         for i in range(self.num_layers):
@@ -388,7 +388,7 @@ class MaskDecoder_task(nn.Module):
         for i in range(global_attn_num):
             if i == 0:
                 masks, iou_pred = self.predict_masks(
-                    image_embeddings=image_embeddings[-1],
+                    image_embeddings=image_embeddings[i],
                     image_pe=image_pe,
                     sparse_prompt_embeddings=sparse_prompt_embeddings,
                     dense_prompt_embeddings=dense_prompt_embeddings,
@@ -402,7 +402,7 @@ class MaskDecoder_task(nn.Module):
                     image_pe=image_pe,
                     sparse_prompt_embeddings=sparse_prompt_embeddings,
                     dense_prompt_embeddings=dense_prompt_embeddings,
-                    task_specific_embed = task_specific_embed[i],
+                    task_specific_embed = task_specific_embed[i-1],
                     concat = True,  # 决定是否要将task_specific_embed进行concat
                     index=i,
                 )
@@ -505,7 +505,7 @@ class Neck(nn.Module):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
-        for i in range(global_attn_num):
+        for i in range(global_attn_num+1):
             neck = nn.Sequential(
                 nn.Conv2d(
                     image_encoder_dim,
@@ -593,7 +593,7 @@ class Sam_task(nn.Module):
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
-            if layer_i in sam_model.image_encoder.global_attn_indexes or layer_i == 0 :
+            if layer_i in sam_model.image_encoder.global_attn_indexes:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
