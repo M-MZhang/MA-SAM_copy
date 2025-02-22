@@ -662,8 +662,8 @@ class Mask_adapter(nn.Module):
                 nn.Linear(decoder_dim, decoder_dim//4),
                 nn.GELU(),
                 nn.Linear(decoder_dim//4, decoder_dim),
-                nn.GELU(),
-                nn.Linear(decoder_dim, decoder_dim),
+                # nn.GELU(),
+                # nn.Linear(decoder_dim, decoder_dim),
                 # nn.LayerNorm(decoder_dim),
             )
             self.mask_adapter_list.append(mask_adapter)
@@ -713,7 +713,7 @@ class Sam_task(nn.Module):
         self.up_scaling = up_scaling(decoder_dim)
         self.down_proj = down_proj(decoder_dim)
 
-        self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num+1)
+        self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
