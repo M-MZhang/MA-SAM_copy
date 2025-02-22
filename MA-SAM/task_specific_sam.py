@@ -206,12 +206,14 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if (i in self.ImageEncoderViT.global_attn_indexes) or (i == 0):
+            if (i in self.ImageEncoderViT.global_attn_indexes):
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
+                if i ==0 :
+                    outputs.append(x)
     
             
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
@@ -370,15 +372,26 @@ class MaskDecoder_task(nn.Module):
 
         # global_attn 对应层
         for i in range(global_attn_num):
-            src, mask_tokens, iou_out = self.predict_masks_pre(
+            if i == 0:
+                src, mask_tokens, iou_out = self.predict_masks_pre(
                 image_embeddings=image_embeddings[i],
                 image_pe=image_pe,
                 sparse_prompt_embeddings=sparse_prompt_embeddings,
                 dense_prompt_embeddings=dense_prompt_embeddings,
-                task_specific_embed = task_specific_embed[i],
-                concat = True,  # 决定是否要将task_specific_embed进行concat
+                task_specific_embed = None,
+                concat = False,  # 决定是否要将task_specific_embed进行concat
                 index=i,
             )
+            else:
+                src, mask_tokens, iou_out = self.predict_masks_pre(
+                    image_embeddings=image_embeddings[i],
+                    image_pe=image_pe,
+                    sparse_prompt_embeddings=sparse_prompt_embeddings,
+                    dense_prompt_embeddings=dense_prompt_embeddings,
+                    task_specific_embed = task_specific_embed[i-1],
+                    concat = True,  # 决定是否要将task_specific_embed进行concat
+                    index=i,
+                )
             global_src.append(src)
             global_masks.append(mask_tokens)
             global_iou_pred.append(iou_out)
@@ -442,9 +455,6 @@ class MaskDecoder_task(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
 
-        # b, c, h, w = upscaled_embedding.shape  # [h, token_num, h, w]
-        # masks = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)  # [1, 4, 256, 256], 256 = 4 * 64, the size of image embeddings
-        # print(masks.shape)
         b, c, h, w = src.shape
         masks = (mask_tokens_out @ src.view(b, c, h*w)).view(b, -1, h, w)
 
@@ -696,7 +706,7 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
 
-        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num+1)
+        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
         self.image_u = U_decoder(decoder_dim, self.global_attn_num)
         self.mask_tokens_u = mask_u_decoder(decoder_dim, self.global_attn_num, sam_model.mask_decoder.num_mask_tokens)
@@ -707,7 +717,7 @@ class Sam_task(nn.Module):
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
-            if layer_i in sam_model.image_encoder.global_attn_indexes or layer_i == 0:
+            if layer_i in sam_model.image_encoder.global_attn_indexes:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
