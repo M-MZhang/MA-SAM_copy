@@ -713,7 +713,7 @@ class Sam_task(nn.Module):
         self.up_scaling = up_scaling(decoder_dim)
         self.down_proj = down_proj(decoder_dim)
 
-        # self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num+1)
+        self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num+1)
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
@@ -765,16 +765,14 @@ class Sam_task(nn.Module):
         ) #[batch, 256, 32, 32]
 
         # hyper_mask_adapter
-        # mask_tokens = self.mask_adapter(self.task_specific_embed_list)
-
-        # mask_tokens = self.mask_adapter(self.task_specific_embed)
+        mask_tokens = self.mask_adapter(self.task_specific_embed_list)
         low_res_masks, iou_predictions = self.sam.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.sam.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            task_specific_embed = self.task_specific_embed_list,
+            task_specific_embed = mask_tokens,
         )
 
         # u-type postprocess
