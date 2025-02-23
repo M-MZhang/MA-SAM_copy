@@ -588,7 +588,7 @@ class Sam_task(nn.Module):
         self.u_decoder = U_decoder(image_size, self.global_attn_num)
 
         self.image_encoder = ImageEncoderViT_task(sam_model.image_encoder)
-        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim, transformer=TwoWayTransformer)
+        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
