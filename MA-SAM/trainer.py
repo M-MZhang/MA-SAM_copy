@@ -157,6 +157,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     for name, para in model.named_parameters():
         if para.requires_grad:
             print(name)
+            logging.info(name)
     logging.info("The number of trainable parameters is {}M".format(num/1000000))
 
     model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
