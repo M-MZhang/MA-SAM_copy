@@ -646,6 +646,10 @@ class Sam_task(nn.Module):
         self.w_As = []
         self.w_Bs = []
 
+        for param in sam_model.image_encoder.parameters():
+            param.requires_grad = False
+
+
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
             if layer_i not in self.lora_layer:
                 continue
@@ -687,7 +691,7 @@ class Sam_task(nn.Module):
                 )
                 # sam_model.image_encoder[layer_i] = blk
         
-        self.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
+        sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
         
         self.sam = sam_model
@@ -712,7 +716,7 @@ class Sam_task(nn.Module):
         # get image and mask task_embeds
         image_task_embed, mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
-        image_embeddings = self.image_encoder(input_images, image_task_embed) #
+        image_embeddings = self.sam_model.image_encoder(input_images, image_task_embed) #
         image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
