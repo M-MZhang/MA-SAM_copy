@@ -152,6 +152,12 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         elif "mask_decoder" in name:
             para.requires_grad_(True)
             num += para.numel()
+        elif "w_As" in name:
+            para.requires_grad_(True)
+            num += para.numel()
+        elif "w_Bs" in name:
+            para.requires_grad_(True)
+            num += para.numel()
     
     # varify the trainable parameters
     for name, para in model.named_parameters():
