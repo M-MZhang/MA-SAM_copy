@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 from icecream import ic
 from typing import Type
+import math
 
 from typing import Any, Dict, List, Tuple
 
@@ -325,6 +326,72 @@ class Attention_task(nn.Module):
 
         return x
 
+class _LoRA_qkv(nn.Module):
+    """In Sam it is implemented as
+    self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+    B, N, C = x.shape
+    qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+    q, k, v = qkv.unbind(0)
+    """
+
+    def __init__(
+            self,
+            qkv: nn.Module,
+            linear_a_q: nn.Module,
+            linear_b_q: nn.Module,
+            linear_a_v: nn.Module,
+            linear_b_v: nn.Module,
+    ):
+        super().__init__()
+        self.qkv = qkv
+        self.linear_a_q = linear_a_q
+        self.linear_b_q = linear_b_q
+        self.linear_a_v = linear_a_v
+        self.linear_b_v = linear_b_v
+        self.dim = qkv.in_features
+        self.w_identity = torch.eye(qkv.in_features)
+
+    def forward(self, x):
+        qkv = self.qkv(x)  # B,N,N,3*org_C
+        new_q = self.linear_b_q(self.linear_a_q(x))
+        new_v = self.linear_b_v(self.linear_a_v(x))
+        qkv[:, :, :, : self.dim] += new_q
+        qkv[:, :, :, -self.dim:] += new_v
+        return qkv
+
+class _LoRA_qkv_global(nn.Module):
+    """In Sam it is implemented as
+    self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+    B, N, C = x.shape
+    qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+    q, k, v = qkv.unbind(0)
+    """
+
+    def __init__(
+            self,
+            qkv: nn.Module,
+            linear_a_q: nn.Module,
+            linear_b_q: nn.Module,
+            linear_a_v: nn.Module,
+            linear_b_v: nn.Module,
+    ):
+        super().__init__()
+        self.qkv = qkv
+        self.linear_a_q = linear_a_q
+        self.linear_b_q = linear_b_q
+        self.linear_a_v = linear_a_v
+        self.linear_b_v = linear_b_v
+        self.dim = qkv.in_features
+        self.w_identity = torch.eye(qkv.in_features)
+
+    def forward(self, x):
+        qkv = self.qkv(x)  # B,N,N,3*org_C
+        new_q = self.linear_b_q(self.linear_a_q(x))
+        new_v = self.linear_b_v(self.linear_a_v(x))
+        qkv[:, :, : self.dim] += new_q
+        qkv[:, :, -self.dim:] += new_v
+        return qkv
+
 class MaskDecoder_task(nn.Module):
     def __init__(
             self,
@@ -538,7 +605,9 @@ class Sam_task(nn.Module):
 
     def __init__(
         self,
-        sam_model: Sam
+        sam_model: Sam,
+        lora_layer: None,
+        r: int,
     ) -> None:
         """
         SAM predicts object masks from an image and input prompts.
@@ -559,18 +628,47 @@ class Sam_task(nn.Module):
         decoder_dim = sam_model.mask_decoder.mask_tokens.weight.shape[1]
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
-
-        # init_layers = [i for i in range(0, sam_model.image_encoder.global_attn_indexes[0])]
-        # init_layers.extend(sam_model.image_encoder.global_attn_indexes)
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
-        # self.u_decoder = U_decoder(image_size, self.global_attn_num)
-
+        
         self.task_specific_embed_list = nn.ParameterList()
+
+        # lora
+        if lora_layer:
+            self.lora_layer = lora_layer
+        else:
+            self.lora_layer = list(
+                range(len(sam_model.image_encoder.blocks))
+            )
+        
+        self.w_As = []
+        self.w_Bs = []
+
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
+            if layer_i not in self.lora_layer:
+                continue
+
+            w_qkv_linear = blk.attn.qkv
+            self.dim = w_qkv_linear.in_features
+            w_a_linear_q = nn.Linear(self.dim, r, bias=False)
+            w_b_linear_q = nn.Linear(r, self.dim, bias=False)
+            w_a_linear_v = nn.Linear(self.dim, r, bias=False)
+            w_b_linear_v = nn.Linear(r, self.dim, bias=False)
+            self.w_As.append(w_a_linear_q)
+            self.w_Bs.append(w_b_linear_q)
+            self.w_As.append(w_a_linear_v)
+            self.w_Bs.append(w_b_linear_v)
+
             if layer_i in sam_model.image_encoder.global_attn_indexes:
+                blk.attn.qkv = _LoRA_qkv_global(
+                    w_qkv_linear,
+                    w_a_linear_q,
+                    w_b_linear_q,
+                    w_a_linear_v,
+                    w_b_linear_v,
+                )
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
@@ -579,6 +677,15 @@ class Sam_task(nn.Module):
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
+            else:
+                blk.attn.qkv = _LoRA_qkv(
+                    w_qkv_linear,
+                    w_a_linear_q,
+                    w_b_linear_q,
+                    w_a_linear_v,
+                    w_b_linear_v,
+                )
+                # sam_model.image_encoder[layer_i] = blk
         
         self.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
@@ -647,6 +754,11 @@ class Sam_task(nn.Module):
             nn.init.constant_(mask_adapter[layer][-1].weight,0)
             nn.init.constant_(mask_adapter[layer][-1].bias,0)
         
+        for w_A in self.w_As:
+            nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
+        for w_B in self.w_Bs:
+            nn.init.zeros_(w_B.weight)
+        
 
     def save_parameters(self, filename: str) ->None:
         
@@ -654,6 +766,10 @@ class Sam_task(nn.Module):
         num_task = self.global_attn_num
         task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
 
+        # lora
+        num_layer = len(self.w_As)  # actually, it is half
+        a_tensors = {f"w_a_{i:03d}": self.w_As[i].weight for i in range(num_layer)}
+        b_tensors = {f"w_b_{i:03d}": self.w_Bs[i].weight for i in range(num_layer)}
         
         task_adapter_tensors = {}
         neck_list_tensors = {}
@@ -679,7 +795,7 @@ class Sam_task(nn.Module):
             # if 'mask_adapter' in key:
             #     mask_adapter_tensors[key] = value
 
-        merged_dict = {**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -687,6 +803,17 @@ class Sam_task(nn.Module):
         assert filename.endswith(".pt") or filename.endswith('.pth')
 
         state_dict = torch.load(filename)
+
+        for i, w_A_linear in enumerate(self.w_As):
+            saved_key = f"w_a_{i:03d}"
+            saved_tensor = state_dict[saved_key]
+            w_A_linear.weight = nn.Parameter(saved_tensor)
+
+        for i, w_B_linear in enumerate(self.w_Bs):
+            saved_key = f"w_b_{i:03d}"
+            saved_tensor = state_dict[saved_key]
+            w_B_linear.weight = nn.Parameter(saved_tensor)
+
         sam_dict = self.state_dict() #调整为针对self的字典
         sam_keys = sam_dict.keys()
 

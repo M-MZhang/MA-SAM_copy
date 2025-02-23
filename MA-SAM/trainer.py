@@ -137,18 +137,18 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             para.requires_grad_(True)
             num += para.numel()
             # print(name)
-        # elif "u_decoder" in name:
-        #     para.requires_grad_(True)
-        #     num += para.numel()
+        elif "w_As" in name:
+            para.requires_grad_(True)
+            num += para.numel()
         elif "Neck_list" in name:
             para.requires_grad_(True)
             num += para.numel()
         elif "task_adapter" in name:
             para.requires_grad_(True)
             num += para.numel()
-        # elif "mask_adapter_list" in name:
-        #     para.requires_grad_(True)
-        #     num += para.numel()
+        elif "w_Bs" in name:
+            para.requires_grad_(True)
+            num += para.numel()
         elif "mask_decoder" in name:
             para.requires_grad_(True)
             num += para.numel()
