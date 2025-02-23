@@ -33,7 +33,7 @@ parser.add_argument('--img_size', type=int, default=512, help='input patch size 
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--vit_name', type=str, default='vit_h', help='select one vit model')
 parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
-parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/Vanille_me_v5.10/epoch_9.pth', help='Finetuned checkpoint')
+parser.add_argument('--adapt_ckpt', type=str, default=None, help='Finetuned checkpoint')
 parser.add_argument('--rank', type=int, default=32, help='Rank for FacT')
 parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')
 parser.add_argument('--warmup', action='store_true', help='If activated, warp up the learning from a lower lr to the base_lr')
