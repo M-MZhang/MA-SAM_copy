@@ -207,8 +207,6 @@ class ImageEncoderViT_task(nn.Module):
                 outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
-                if i == 0:
-                    outputs.append(x)
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
@@ -342,7 +340,7 @@ class MaskDecoder_task(nn.Module):
         self.mask_tokens_list = nn.ParameterList()
         self.iou_prediction_head = MaskDecoder.iou_prediction_head
 
-        for i in range(num_layer+1):
+        for i in range(num_layer):
             output_upscaling = nn.Sequential(
                 nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
                 LayerNorm2d(transformer_dim // 4),
@@ -393,23 +391,24 @@ class MaskDecoder_task(nn.Module):
 
         # global_attn 对应层
         for i in range(global_attn_num):
-            if i == 0: # image_embeddings from layer 0 does't have a concat
-                masks, iou_pred = self.predict_masks(
-                    image_embeddings=image_embeddings[i], # i=0
-                    image_pe=image_pe,
-                    sparse_prompt_embeddings=sparse_prompt_embeddings,
-                    dense_prompt_embeddings=dense_prompt_embeddings,
-                    task_specific_embed = None,
-                    concat = False,  # 决定是否要将task_specific_embed进行concat
-                    index = i, #i = 0
-                )
-            # else
+            # if i == 0: # image_embeddings from layer 0 does't have a concat
+            #     masks, iou_pred = self.predict_masks(
+            #         image_embeddings=image_embeddings[i], # i=0
+            #         image_pe=image_pe,
+            #         sparse_prompt_embeddings=sparse_prompt_embeddings,
+            #         dense_prompt_embeddings=dense_prompt_embeddings,
+            #         task_specific_embed = None,
+            #         concat = False,  # 决定是否要将task_specific_embed进行concat
+            #         index = i, #i = 0
+            #     )
+            # # else
+            # 所有的层都有tokens的加入
             masks, iou_pred = self.predict_masks(
                 image_embeddings=image_embeddings[i],
                 image_pe=image_pe,
                 sparse_prompt_embeddings=sparse_prompt_embeddings,
                 dense_prompt_embeddings=dense_prompt_embeddings,
-                task_specific_embed = task_specific_embed[i-1], # task_specific_embed less than image_embeddings
+                task_specific_embed = task_specific_embed[i], # task_specific_embed less than image_embeddings
                 concat = True,  # 决定是否要将task_specific_embed进行concat
                 index=i,
             )
@@ -481,7 +480,7 @@ class U_decoder(nn.Module):
         
         self.u_fusion_list = nn.Sequential(
                     nn.Conv2d(
-                        global_attn_num+1,
+                        global_attn_num,
                         1,
                         kernel_size=1,
                         bias=False,
@@ -502,7 +501,7 @@ class Neck(nn.Module):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
-        for i in range(global_attn_num+1):
+        for i in range(global_attn_num):
             neck = nn.Sequential(
                 nn.Conv2d(
                     image_encoder_dim,
@@ -580,9 +579,12 @@ class Sam_task(nn.Module):
         
         decoder_dim = sam_model.mask_decoder.mask_tokens.weight.shape[1]
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
-        self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
 
+        init_layers = [i for i in range(0, sam_model.global_attn_indexes[0])]
+        global_attn_index = init_layers.extend(sam_model.global_attn_index)
+        self.global_attn_num = len(global_attn_index)
+        
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
         self.u_decoder = U_decoder(image_size, self.global_attn_num)
@@ -592,7 +594,7 @@ class Sam_task(nn.Module):
         
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
-            if layer_i in sam_model.image_encoder.global_attn_indexes:
+            if layer_i in global_attn_index:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
