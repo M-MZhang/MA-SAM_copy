@@ -246,11 +246,11 @@ class Task_adapter(nn.Module):
 
             self.mask_adapter_mlp_list.append(
                 nn.Sequential(
-                    nn.Linear(output_dim, output_dim//4),
+                    nn.Linear(input_dim, input_dim//4),
                     nn.ReLU(),
-                    nn.Linear(output_dim//4, output_dim),
+                    nn.Linear(input_dim//4, input_dim),
                     nn.ReLU(),
-                    nn.Linear(output_dim, output_dim),
+                    nn.Linear(input_dim, input_dim),
                 )
             )
     
