@@ -372,8 +372,6 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(n_transformer)
            
-           
-
     
     def forward(
             self,
@@ -410,9 +408,6 @@ class MaskDecoder_task(nn.Module):
         
         # Run the transforme
         for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
-
-            
-            
             # Expand per-image data in batch direction to be per-mask
             if i == self.num_layer-1:
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
@@ -565,9 +560,9 @@ class Sam_task(nn.Module):
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
 
-        init_layers = [i for i in range(0, sam_model.image_encoder.global_attn_indexes[0])]
-        init_layers.extend(sam_model.image_encoder.global_attn_indexes)
-        self.global_attn_num = len(init_layers)
+        # init_layers = [i for i in range(0, sam_model.image_encoder.global_attn_indexes[0])]
+        # init_layers.extend(sam_model.image_encoder.global_attn_indexes)
+        self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
@@ -575,7 +570,7 @@ class Sam_task(nn.Module):
 
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
-            if layer_i in init_layers:
+            if layer_i in sam_model.image_encoder.global_attn_indexes:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
@@ -585,7 +580,7 @@ class Sam_task(nn.Module):
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
         
-        self.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, init_layers)
+        self.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
         
         self.sam = sam_model
