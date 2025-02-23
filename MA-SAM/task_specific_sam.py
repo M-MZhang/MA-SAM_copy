@@ -187,10 +187,12 @@ class ImageEncoderViT_task(nn.Module):
     def __init__(
         self,
         ImageEncoderViT: nn.Module,
+        init_layers,
         # task_adapter:nn.Module,
     ) -> None:
         super().__init__()
         self.ImageEncoderViT = ImageEncoderViT
+        self.init_layers = init_layers
         # self.img_size = self.ImageEncoderViT.img_size
 
     def forward(self, x: torch.Tensor, task_embed: torch.Tensor) -> torch.Tensor:
@@ -201,7 +203,7 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.ImageEncoderViT.global_attn_indexes:
+            if i in self.init_layers:
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
@@ -581,20 +583,17 @@ class Sam_task(nn.Module):
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
 
-        init_layers = [i for i in range(0, sam_model.global_attn_indexes[0])]
-        global_attn_index = init_layers.extend(sam_model.global_attn_index)
-        self.global_attn_num = len(global_attn_index)
+        init_layers = [i for i in range(0, sam_model.image_encoder.global_attn_indexes[0])]
+        init_layers.extend(sam_model.image_encoder.global_attn_indexes)
+        self.global_attn_num = len(init_layers)
         
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
         self.u_decoder = U_decoder(image_size, self.global_attn_num)
 
-        self.image_encoder = ImageEncoderViT_task(sam_model.image_encoder)
-        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
-        
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
-            if layer_i in global_attn_index:
+            if layer_i in init_layers:
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
@@ -603,6 +602,9 @@ class Sam_task(nn.Module):
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
+        
+        self.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, init_layers)
+        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
         
         self.sam = sam_model
 
