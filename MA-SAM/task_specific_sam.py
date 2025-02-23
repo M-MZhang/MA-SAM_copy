@@ -409,7 +409,7 @@ class MaskDecoder_task(nn.Module):
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
         
         # Run the transforme
-        for i in range((self.num_layer, -1, -1)): # use the reversed number to start from the end
+        for i in range(self.num_layer, -1, -1): # use the reversed number to start from the end
 
             mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
             
