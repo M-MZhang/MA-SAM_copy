@@ -104,11 +104,12 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
     return metric_list
 
 def inference(args, multimask_output, model, test_save_path=None):
-    data_fd_list = pd.read_csv('/root/data1/zmm/seg4medicine/data/synapseCT/Training/2D_all_5slice'+'/test.csv')
-    data_fd_list = data_fd_list["image_pth"]
-    data_fd_list = [data_fd.split("/")[-3] for data_fd in data_fd_list]
-    data_fd_list = list(set(data_fd_list))
-    data_fd_list.sort()
+    # data_fd_list = pd.read_csv('/root/data1/zmm/seg4medicine/data/synapseCT/Training/2D_all_5slice'+'/test.csv')
+    # data_fd_list = data_fd_list["image_pth"]
+    # data_fd_list = [data_fd.split("/")[-3] for data_fd in data_fd_list]
+    # data_fd_list = list(set(data_fd_list))
+    # data_fd_list.sort()
+    data_fd_list = ['0035', '0036', '0037', '0038', '0039', '0040']
     
     model.eval()
     metric_list = []

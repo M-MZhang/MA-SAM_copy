@@ -654,6 +654,10 @@ class Sam_task(nn.Module):
         self.mask_adapter = Mask_adapter(decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
+
+        for param in sam_model.image_encoder.parameters():
+            param.requires_grad = False
+
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
 
             if lora_layer:
@@ -662,8 +666,8 @@ class Sam_task(nn.Module):
                 self.lora_layer = list(
                     range(len(sam_model.image_encoder.blocks)))  # Only apply lora to the image encoder by default
             # create for storage, then we can init them or load weights
-            self.w_As = []  # These are linear layers
-            self.w_Bs = []
+            self.w_As =  [] # These are linear layers
+            self.w_Bs =  []
 
             if layer_i not in self.lora_layer:
                 continue

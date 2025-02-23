@@ -132,32 +132,33 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     
     num = 0
     for name, para in model.named_parameters():
-        para.requires_grad_(False)
-        if "task_specific_embed_list" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
-            para.requires_grad_(True)
-            num += para.numel()
-            # print(name)
-        elif "u_decoder" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "Neck_list" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "task_adapter" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "mask_adapter_list" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "mask_decoder" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "w_As" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        elif "w_Bs" in name:
-            para.requires_grad_(True)
-            num += para.numel()
+        if "image_encoder" not in name:
+            para.requires_grad_(False)
+            if "task_specific_embed_list" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
+                para.requires_grad_(True)
+                num += para.numel()
+                # print(name)
+            elif "u_decoder" in name:
+                para.requires_grad_(True)
+                num += para.numel()
+            elif "Neck_list" in name:
+                para.requires_grad_(True)
+                num += para.numel()
+            elif "task_adapter" in name:
+                para.requires_grad_(True)
+                num += para.numel()
+            elif "mask_adapter_list" in name:
+                para.requires_grad_(True)
+                num += para.numel()
+            elif "mask_decoder" in name:
+                para.requires_grad_(True)
+                num += para.numel()
+            # elif "w_As" in name:
+            #     para.requires_grad_(True)
+            #     num += para.numel()
+            # elif "w_Bs" in name:
+            #     para.requires_grad_(True)
+            #     num += para.numel()
     
     # varify the trainable parameters
     for name, para in model.named_parameters():
