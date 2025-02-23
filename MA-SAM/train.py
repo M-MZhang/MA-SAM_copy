@@ -83,7 +83,7 @@ if __name__ == "__main__":
                                                                 pixel_std=[1., 1., 1.])
 
     pkg = import_module(args.module)
-    net = pkg.Sam_task(sam).cuda() 
+    net = pkg.Sam_task(sam, 4).cuda() 
     # net = sam.cuda()
     if args.compile:
         net = torch.compile(net)
