@@ -409,12 +409,13 @@ class MaskDecoder_task(nn.Module):
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
         
         # Run the transforme
-        for i in range((self.num_layer, -1, -1)): # use the reversed number to start from the end
+        for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
 
-            mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+            
             
             # Expand per-image data in batch direction to be per-mask
             if i == self.num_layer-1:
+                mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
                 hs = torch.cat((output_tokens, sparse_prompt_embeddings, mask_tokens), dim=1)
                 src = torch.repeat_interleave(image_embeddings[i], hs.shape[0], dim=0)
                 src = src + dense_prompt_embeddings
@@ -423,6 +424,7 @@ class MaskDecoder_task(nn.Module):
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
                 src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
