@@ -259,7 +259,7 @@ class Task_adapter(nn.Module):
         mask_task_embed = []
         for i in range(self.num_layers):
             image_task_embed.append(self.task_adapter_mlp_list[i](task_embed[i])) # what if we do not give it mean[task_num, dim]
-            mask_task_embed.append(self.mask_adapter_mlp_list[i](task_embed))
+            mask_task_embed.append(self.mask_adapter_mlp_list[i](task_embed[i]))
         return image_task_embed, mask_task_embed
 
 
