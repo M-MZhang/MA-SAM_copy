@@ -335,37 +335,34 @@ class MaskDecoder_task(nn.Module):
         super().__init__()
         # self.MaskDecoder = MaskDecoder
         self.num_mask_tokens = MaskDecoder.num_mask_tokens
-        self.output_upsacling_list = nn.ModuleList()
-        self.output_hypernetworks_mlps_list = nn.ModuleList()
+        self.num_layer = num_layer
+        
         self.transformer_list = nn.ModuleList()
-        self.iou_tokens_list = nn.ParameterList()
-        self.mask_tokens_list = nn.ParameterList()
+        
+        self.iou_tokens = nn.Embedding(1, transformer_dim)
+        self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
         self.iou_prediction_head = MaskDecoder.iou_prediction_head
-
+        self.output_upscaling = nn.Sequential(
+            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
+            LayerNorm2d(transformer_dim // 4),
+            nn.GELU(),
+            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
+            LayerNorm2d(transformer_dim // 8),
+            nn.GELU(),
+            nn.ConvTranspose2d(transformer_dim // 8, transformer_dim // 16, kernel_size=2, stride=2),
+            LayerNorm2d(transformer_dim // 16),
+            nn.GELU(),
+            nn.ConvTranspose2d(transformer_dim // 16, transformer_dim // 32, kernel_size=2, stride=2),
+            nn.GELU(),
+        )
+        self.output_hypernetworks_mlps = nn.ModuleList(
+            [
+                MLP(transformer_dim, transformer_dim, transformer_dim // 32, 3)
+                for i in range(self.num_mask_tokens)
+            ]
+        )
+    
         for i in range(num_layer):
-            output_upscaling = nn.Sequential(
-                nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
-                LayerNorm2d(transformer_dim // 4),
-                nn.GELU(),
-                nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
-                LayerNorm2d(transformer_dim // 8),
-                nn.GELU(),
-                nn.ConvTranspose2d(transformer_dim // 8, transformer_dim // 16, kernel_size=2, stride=2),
-                LayerNorm2d(transformer_dim // 16),
-                nn.GELU(),
-                nn.ConvTranspose2d(transformer_dim // 16, transformer_dim // 32, kernel_size=2, stride=2),
-                nn.GELU(),
-            )
-            self.output_upsacling_list.append(output_upscaling)
-            
-            output_hypernetworks_mlps = nn.ModuleList(
-                [
-                    MLP(transformer_dim, transformer_dim, transformer_dim // 32, 3)
-                    for i in range(self.num_mask_tokens)
-                ]
-            )   
-            self.output_hypernetworks_mlps_list.append(output_hypernetworks_mlps)
-
             n_transformer = TwoWayTransformer(
                 depth=2,
                 embedding_dim=transformer_dim,
@@ -374,8 +371,8 @@ class MaskDecoder_task(nn.Module):
             )
             
             self.transformer_list.append(n_transformer)
-            self.iou_tokens_list.append(nn.Embedding(1, transformer_dim))
-            self.mask_tokens_list.append(nn.Embedding(self.num_mask_tokens, transformer_dim))
+           
+           
 
     
     def forward(
@@ -387,37 +384,16 @@ class MaskDecoder_task(nn.Module):
             multimask_output: bool,
             task_specific_embed: torch.Tensor,
     ):  
-        global_attn_num = len(image_embeddings) #[n, b, c, h, w]
-        global_masks = []
-        global_iou_pred = []
-
-        # global_attn 对应层
-        for i in range(global_attn_num):
-            # if i == 0: # image_embeddings from layer 0 does't have a concat
-            #     masks, iou_pred = self.predict_masks(
-            #         image_embeddings=image_embeddings[i], # i=0
-            #         image_pe=image_pe,
-            #         sparse_prompt_embeddings=sparse_prompt_embeddings,
-            #         dense_prompt_embeddings=dense_prompt_embeddings,
-            #         task_specific_embed = None,
-            #         concat = False,  # 决定是否要将task_specific_embed进行concat
-            #         index = i, #i = 0
-            #     )
-            # # else
-            # 所有的层都有tokens的加入
-            masks, iou_pred = self.predict_masks(
-                image_embeddings=image_embeddings[i],
-                image_pe=image_pe,
-                sparse_prompt_embeddings=sparse_prompt_embeddings,
-                dense_prompt_embeddings=dense_prompt_embeddings,
-                task_specific_embed = task_specific_embed[i], # task_specific_embed less than image_embeddings
-                concat = True,  # 决定是否要将task_specific_embed进行concat
-                index=i,
-            )
-            global_masks.append(masks)
-            global_iou_pred.append(iou_pred)
+    
+        masks, iou_pred = self.predict_masks(
+            image_embeddings=image_embeddings,
+            image_pe=image_pe,
+            sparse_prompt_embeddings=sparse_prompt_embeddings,
+            dense_prompt_embeddings=dense_prompt_embeddings,
+            task_specific_embed = task_specific_embed, 
+        )
                 
-        return torch.stack(global_masks), torch.stack(global_iou_pred)
+        return masks, iou_pred
 
     def predict_masks(
         self,
@@ -426,39 +402,43 @@ class MaskDecoder_task(nn.Module):
         sparse_prompt_embeddings: torch.Tensor,
         dense_prompt_embeddings: torch.Tensor,
         task_specific_embed: torch.Tensor, # 加入可学习部分
-        concat : bool,
-        index: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
-        # Concatenate output tokens
-        output_tokens = torch.cat([self.iou_tokens_list[index].weight, self.mask_tokens_list[index].weight], dim=0)
-        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        # Concatenate output tokens (number of mask_tokens remains to 1)
+        output_tokens = torch.cat([self.iou_tokens.weight, self.mask_tokens.weight], dim=0)
+        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
         
-        if concat:
-            mask_tokens = task_specific_embed.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
-            tokens = torch.cat((output_tokens, sparse_prompt_embeddings, mask_tokens), dim=1)
-        else:
-            tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
+        # Run the transforme
+        for i in range((self.num_layer, -1, -1)): # use the reversed number to start from the end
 
-        # Expand per-image data in batch direction to be per-mask
-        src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
-        src = src + dense_prompt_embeddings
-        pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
-        b, c, h, w = src.shape
-
-        # Run the transformer
-        hs, src = self.transformer_list[index](src, pos_src, tokens)
+            mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+            
+            # Expand per-image data in batch direction to be per-mask
+            if i == self.num_layer-1:
+                hs = torch.cat((output_tokens, sparse_prompt_embeddings, mask_tokens), dim=1)
+                src = torch.repeat_interleave(image_embeddings[i], hs.shape[0], dim=0)
+                src = src + dense_prompt_embeddings
+                b, c, h, w = src.shape
+                src = src.flatten(2).permute(0,2,1)
+                pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
+            else:
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
+             
+            hs, src = self.transformer_list[i](src, pos_src, hs)
+        
+        
         iou_token_out = hs[:, 0, :]
         mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
         # print(src.shape)
-        upscaled_embedding = self.output_upsacling_list[index](src) #[b, embed_dim//32, pos_dim*16]
+        upscaled_embedding = self.output_upscaling(src) #[b, embed_dim//32, pos_dim*16]
         # print(upscaled_embedding.shape)
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
-            hyper_in_list.append(self.output_hypernetworks_mlps_list[index][i](mask_tokens_out[:, i, :]))
+            hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)  # [b, task_num, embed_dim//32]
 
         b, c, h, w = upscaled_embedding.shape  # [h, token_num, h, w]
@@ -589,7 +569,7 @@ class Sam_task(nn.Module):
         
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
         self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.u_decoder = U_decoder(image_size, self.global_attn_num)
+        # self.u_decoder = U_decoder(image_size, self.global_attn_num)
 
         self.task_specific_embed_list = nn.ParameterList()
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
@@ -643,11 +623,6 @@ class Sam_task(nn.Module):
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
             task_specific_embed = mask_task_embed,
-        )
-
-        # u-type postprocess
-        low_res_masks = self.u_decoder(
-            decoder_embeddings = low_res_masks
         )
 
         masks = self.sam.postprocess_masks(
