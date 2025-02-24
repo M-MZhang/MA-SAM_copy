@@ -448,6 +448,13 @@ class MaskDecoder_task(nn.Module):
                         bias=True,
                     ),
                     LayerNorm2d(transformer_dim),
+                    nn.Conv2d(
+                        transformer_dim,
+                        transformer_dim,
+                        kernel_size=1,
+                        bias=True,
+                    ),
+                    LayerNorm2d(transformer_dim),
                 )
             self.fusion_list.append(fusion) # 融合image_embeddings的东西
         
