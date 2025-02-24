@@ -543,11 +543,11 @@ class U_decoder(nn.Module):
         return masks
 
 class Neck(nn.Module):
-    def __init__(self, image_encoder_dim, decoder_dim, global_attn_num ):
+    def __init__(self, image_encoder, image_encoder_dim, decoder_dim, global_attn_num ):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
-        for i in range(global_attn_num):
+        for i in range(global_attn_num-1):
             neck = nn.Sequential(
                 nn.Conv2d(
                     image_encoder_dim,
@@ -566,6 +566,8 @@ class Neck(nn.Module):
                 LayerNorm2d(decoder_dim),
             )
             self.image_neck_list.append(neck)
+        
+        self.image_neck_list.append(image_encoder.neck) # init the last neck conv by original one
         
     def forward(self, image_embeddings):
         for i in range(len(self.image_neck_list)):
@@ -631,7 +633,7 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         
         self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
 

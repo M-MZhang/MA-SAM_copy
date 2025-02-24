@@ -23,10 +23,10 @@ parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/RawData/T
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=16, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=4, help='total gpu')
-parser.add_argument('--base_lr', type=float, default=0.0002, help='segmentation network learning rate')
+parser.add_argument('--base_lr', type=float, default=0.0008, help='segmentation network learning rate')
 
-parser.add_argument('--max_epochs', type=int,default=150, help='maximum epoch number to train')
-parser.add_argument('--stop_epoch', type=int, default=500, help='maximum epoch number to train')
+parser.add_argument('--max_epochs', type=int,default=400, help='maximum epoch number to train')
+parser.add_argument('--stop_epoch', type=int, default=300, help='maximum epoch number to train')
 
 parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
 parser.add_argument('--img_size', type=int, default=512, help='input patch size of network input')
@@ -37,7 +37,7 @@ parser.add_argument('--adapt_ckpt', type=str, default=None, help='Finetuned chec
 parser.add_argument('--rank', type=int, default=32, help='Rank for FacT')
 parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')
 parser.add_argument('--warmup', action='store_true', help='If activated, warp up the learning from a lower lr to the base_lr')
-parser.add_argument('--warmup_period', type=int, default=200, help='Warp up iterations, only valid when warmup is activated')
+parser.add_argument('--warmup_period', type=int, default=250, help='Warp up iterations, only valid when warmup is activated')
 parser.add_argument('--AdamW', action='store_true', help='If activated, use AdamW to finetune SAM model')
 parser.add_argument('--module', type=str, default='task_specific_sam')
 parser.add_argument('--dice_param', type=float, default=0.8)
