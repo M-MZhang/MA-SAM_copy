@@ -194,7 +194,7 @@ class ImageEncoderViT_task(nn.Module):
         super().__init__()
         self.ImageEncoderViT = ImageEncoderViT
         self.init_layers = init_layers
-        # self.img_size = self.ImageEncoderViT.img_size
+        self.img_size = self.ImageEncoderViT.img_size
 
     def forward(self, x: torch.Tensor, task_embed: torch.Tensor) -> torch.Tensor:
         x = self.ImageEncoderViT.patch_embed(x)
@@ -718,7 +718,7 @@ class Sam_task(nn.Module):
         # get image and mask task_embeds
         image_task_embed, mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
-        image_embeddings = self.sam_model.image_encoder(input_images, image_task_embed) #
+        image_embeddings = self.sam.image_encoder(input_images, image_task_embed) #
         image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
