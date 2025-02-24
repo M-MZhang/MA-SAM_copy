@@ -795,7 +795,7 @@ class Sam_task(nn.Module):
         neck_list_tensors = {}
         u_decoder_tensors = {}
         mask_decoder_tensors = {}
-        # mask_adapter_tensors = {}
+        fusion_list_tensors = {}
 
         
         if isinstance(self, torch.nn.DataParallel) or isinstance(self, torch.nn.parallel.DistributedDataParallel):
@@ -812,10 +812,10 @@ class Sam_task(nn.Module):
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key:
                 mask_decoder_tensors[key] = value
-            # if 'mask_adapter' in key:
-            #     mask_adapter_tensors[key] = value
+            if 'fusion_list' in key:
+                fusion_list_tensors[key] = value
 
-        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors, **fusion_list_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -867,11 +867,11 @@ class Sam_task(nn.Module):
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
 
-        #load mask_adapter
-        # mask_adapter_keys = [k for k in sam_keys if 'mask_adapter' in k]
-        # mask_adapter_values = [state_dict[k] for k in mask_adapter_keys]
-        # mask_adapter_state_dict = {k:v for k,v in zip(mask_adapter_keys, mask_adapter_values)}
-        # sam_dict.update(mask_adapter_state_dict)
+        # load mask_adapter
+        fusion_list_keys = [k for k in sam_keys if 'fusion_list' in k]
+        fusion_list_values = [state_dict[k] for k in fusion_list_keys]
+        fusion_list_state_dict = {k:v for k,v in zip(fusion_list_keys,fusion_list_values)}
+        sam_dict.update(fusion_list_state_dict)
 
         self.load_state_dict(sam_dict)
 
