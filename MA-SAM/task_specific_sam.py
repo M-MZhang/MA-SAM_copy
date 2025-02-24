@@ -608,8 +608,8 @@ class Sam_task(nn.Module):
     def __init__(
         self,
         sam_model: Sam,
-        lora_layer: None,
         r: int,
+        lora_layer = None,
     ) -> None:
         """
         SAM predicts object masks from an image and input prompts.
