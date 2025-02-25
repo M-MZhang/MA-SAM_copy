@@ -474,7 +474,7 @@ class MaskDecoder_task(nn.Module):
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
         
         # Run the transforme
-        for i in range((0, self.num_layer)): # use the reversed number to start from the end
+        for i in range(self.num_layer): # use the reversed number to start from the end
             # Expand per-image data in batch direction to be per-mask
             if i == 0:
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
