@@ -144,7 +144,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             elif "task_adapter" in name:
                 para.requires_grad_(True)
                 num += para.numel()
-            elif "mask_decoder" in name:
+            elif "mask_decoder" in name and 'sam' not in name:
                 para.requires_grad_(True)
                 num += para.numel()
     
@@ -173,9 +173,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     if args.use_amp:
         scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
 
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    #         optimizer, float(args.max_epochs)
-    #     )
+   
     
     # if args.warmup:
     #     scheduler = ConstantWarmupScheduler(
@@ -189,6 +187,10 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     stop_epoch = args.stop_epoch
     max_iterations = args.max_epochs * len(trainloader)
     logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
+    # step by iterations
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, float(max_iterations)
+        )
     
     iterator = tqdm(range(max_epoch), ncols=70)
 
@@ -213,21 +215,22 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
+                scheduler.step()
             
-            if args.warmup and iter_num < args.warmup_period:
-                lr_ = base_lr * ((iter_num + 1) / args.warmup_period)
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = lr_
-            else:
-                if args.warmup:
-                    shift_iter = iter_num - args.warmup_period
-                    assert shift_iter >= 0, f'Shift iter is {shift_iter}, smaller than zero'
-                else:
-                    shift_iter = iter_num
-                lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = lr_
-            # lr = scheduler.get_last_lr()
+            # if args.warmup and iter_num < args.warmup_period:
+            #     lr_ = base_lr * ((iter_num + 1) / args.warmup_period)
+            #     for param_group in optimizer.param_groups:
+            #         param_group['lr'] = lr_
+            # else:
+            #     if args.warmup:
+            #         shift_iter = iter_num - args.warmup_period
+            #         assert shift_iter >= 0, f'Shift iter is {shift_iter}, smaller than zero'
+            #     else:
+            #         shift_iter = iter_num
+            #     lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp
+            #     for param_group in optimizer.param_groups:
+            #         param_group['lr'] = lr_
+            lr_ = scheduler.get_last_lr()
             iter_num = iter_num + 1
             writer.add_scalar('info/lr',lr_ , iter_num)
             writer.add_scalar('info/total_loss', loss, iter_num)

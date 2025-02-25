@@ -474,9 +474,9 @@ class MaskDecoder_task(nn.Module):
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
         
         # Run the transforme
-        for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
+        for i in range((0, self.num_layer)): # use the reversed number to start from the end
             # Expand per-image data in batch direction to be per-mask
-            if i == self.num_layer-1:
+            if i == 0:
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
                 hs = torch.cat((output_tokens, sparse_prompt_embeddings, mask_tokens), dim=1)
                 src = torch.repeat_interleave(image_embeddings[i], hs.shape[0], dim=0)
