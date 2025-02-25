@@ -221,46 +221,45 @@ class Task_adapter(nn.Module):
 
     def __init__(
             self,
-            input_dim: int,
-            hidden_dim: int,
-            output_dim: int,
+            num_mask_tokens:int,
+            image_dim:int, 
+            decoder_dim:int,
             num_layers: int,
             sigmoid_output: bool = False,
     ) -> None:
         
         super().__init__()
         self.num_layers = num_layers
+        self.num_mask_tokens = num_mask_tokens
         # h = [hidden_dim] * (num_layers - 1)
         self.task_adapter_mlp_list = nn.ModuleList()
         self.mask_adapter_mlp_list = nn.ModuleList()
         for i in range(self.num_layers):
-            self.task_adapter_mlp_list.append(nn.Sequential(
-                nn.Linear(input_dim, output_dim//4),
-                nn.ReLU(),
-                nn.Linear(output_dim//4, output_dim//4),
-                nn.ReLU(),
-                nn.Linear(output_dim//4, output_dim),
-                nn.ReLU(),
-                nn.Linear(output_dim, output_dim), #增加一项全连接层
-                ) 
-            )
-
-            self.mask_adapter_mlp_list.append(
-                nn.Sequential(
-                    nn.Linear(input_dim, input_dim//4),
-                    nn.ReLU(),
-                    nn.Linear(input_dim//4, input_dim),
-                    nn.ReLU(),
-                    nn.Linear(input_dim, input_dim),
+            self.task_adapter_mlp_list.append(nn.ModuleList(
+                    [
+                        MLP(decoder_dim, image_dim//4, image_dim, 3)
+                        for i in range(self.num_mask_tokens)
+                    ]
                 )
+            ) 
+            
+
+            self.mask_adapter_mlp_list.append(nn.ModuleList(
+                    [
+                        MLP(decoder_dim, decoder_dim//2, decoder_dim, 3)
+                        for i in range(self.num_mask_tokens)
+                    ]
+                )                
             )
     
     def forward(self, task_embed: torch.Tensor):
         image_task_embed = []
         mask_task_embed = []
         for i in range(self.num_layers):
-            image_task_embed.append(self.task_adapter_mlp_list[i](task_embed[i])) # what if we do not give it mean[task_num, dim]
-            mask_task_embed.append(self.mask_adapter_mlp_list[i](task_embed[i]))
+            for j in range(self.num_mask_tokens):
+                image_task_embed.append(self.task_adapter_mlp_list[i][j](task_embed[i][j])) # what if we do not give it mean[task_num, dim]
+                mask_task_embed.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
+        
         return image_task_embed, mask_task_embed
 
 
@@ -749,16 +748,17 @@ class Sam_task(nn.Module):
         return outputs
     
     def init_weights(self):
-        task_adapter = self.task_adapter.task_adapter_mlp_list
-        mask_adapter = self.task_adapter.mask_adapter_mlp_list
-        layers = len(task_adapter)
-        for layer in range(layers):
-            nn.init.constant_(task_adapter[layer][-1].weight, 0)
-            nn.init.constant_(task_adapter[layer][-1].bias, 0)
+        # task_adapter = self.task_adapter.task_adapter_mlp_list
+        # mask_adapter = self.task_adapter.mask_adapter_mlp_list
+        # layers = len(task_adapter)
+        # for layer in range(layers):
+        #     nn.init.constant_(task_adapter[layer][-1].weight, 0)
+        #     nn.init.constant_(task_adapter[layer][-1].bias, 0)
             
-            #init the mask_adapter
-            nn.init.constant_(mask_adapter[layer][-1].weight,0)
-            nn.init.constant_(mask_adapter[layer][-1].bias,0)
+        #     #init the mask_adapter
+        #     nn.init.constant_(mask_adapter[layer][-1].weight,0)
+        #     nn.init.constant_(mask_adapter[layer][-1].bias,0)
+        #  to initialize the adapter is complex
         
         for w_A in self.w_As:
             nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
