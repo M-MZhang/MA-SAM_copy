@@ -204,7 +204,7 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.init_layers:
+            if i in self.init_layers or i==0:
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
@@ -632,8 +632,8 @@ class Sam_task(nn.Module):
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
         
-        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num+1)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         
         self.task_specific_embed_list = nn.ParameterList()
 
@@ -667,7 +667,7 @@ class Sam_task(nn.Module):
             self.w_As.append(w_a_linear_v)
             self.w_Bs.append(w_b_linear_v)
 
-            if layer_i in sam_model.image_encoder.global_attn_indexes:
+            if layer_i in sam_model.image_encoder.global_attn_indexes or layer_i==0:
                 blk.attn.qkv = _LoRA_qkv_global(
                     w_qkv_linear,
                     w_a_linear_q,
