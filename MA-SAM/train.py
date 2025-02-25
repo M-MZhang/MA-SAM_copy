@@ -21,11 +21,11 @@ parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/RawData/T
 parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/Vanille_me_v6.1')
 parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/RawData/Training')
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
-parser.add_argument('--batch_size', type=int, default=16, help='batch_size per gpu')
+parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=4, help='total gpu')
-parser.add_argument('--base_lr', type=float, default=0.0008, help='segmentation network learning rate')
+parser.add_argument('--base_lr', type=float, default=0.0012, help='segmentation network learning rate')
 
-parser.add_argument('--max_epochs', type=int,default=400, help='maximum epoch number to train')
+parser.add_argument('--max_epochs', type=int,default=300, help='maximum epoch number to train')
 parser.add_argument('--stop_epoch', type=int, default=300, help='maximum epoch number to train')
 
 parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
@@ -41,7 +41,7 @@ parser.add_argument('--warmup_period', type=int, default=250, help='Warp up iter
 parser.add_argument('--AdamW', action='store_true', help='If activated, use AdamW to finetune SAM model')
 parser.add_argument('--module', type=str, default='task_specific_sam')
 parser.add_argument('--dice_param', type=float, default=0.8)
-parser.add_argument('--lr_exp', type=float, default=7, help='The learning rate decay expotential')
+parser.add_argument('--lr_exp', type=float, default=5, help='The learning rate decay expotential')
 
 # acceleration choices
 parser.add_argument('--tf32', action='store_true', help='If activated, use tf32 to accelerate the training process')
