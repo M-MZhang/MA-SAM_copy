@@ -235,15 +235,17 @@ class Task_adapter(nn.Module):
         self.task_adapter_mlp_list = nn.ModuleList()
         self.mask_adapter_mlp_list = nn.ModuleList()
         for i in range(self.num_layers):
-            self.task_adapter_mlp_list.append(nn.ModuleList(
-                    [
-                        MLP(decoder_dim, image_dim//4, image_dim, 3)
-                        for i in range(self.num_mask_tokens)
-                    ]
-                )
-            ) 
-            
-
+            self.task_adapter_mlp_list.append(nn.Sequential(
+                nn.Linear(decoder_dim, image_dim//4),
+                nn.ReLU(),
+                nn.Linear(image_dim//4, image_dim//4),
+                nn.ReLU(),
+                nn.Linear(image_dim//4, image_dim),
+                nn.ReLU(),
+                nn.Linear(image_dim, image_dim), #增加一项全连接层
+                ) 
+            )
+        
             self.mask_adapter_mlp_list.append(nn.ModuleList(
                     [
                         MLP(decoder_dim, decoder_dim//2, decoder_dim, 3)
@@ -256,8 +258,8 @@ class Task_adapter(nn.Module):
         image_task_embed = []
         mask_task_embed = []
         for i in range(self.num_layers):
+            image_task_embed.append(self.task_adapter_mlp_list[i](task_embed[i])) # what if we do not give it mean[task_num, dim]
             for j in range(self.num_mask_tokens):
-                image_task_embed.append(self.task_adapter_mlp_list[i][j](task_embed[i][j])) # what if we do not give it mean[task_num, dim]
                 mask_task_embed.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
         
         return image_task_embed, mask_task_embed
