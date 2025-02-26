@@ -41,10 +41,12 @@ class MLP(nn.Module):
             nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
         )
         self.sigmoid_output = sigmoid_output
+        
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            # x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = F.leaky_relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x
@@ -237,11 +239,11 @@ class Task_adapter(nn.Module):
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
                 nn.Linear(decoder_dim, image_dim//4),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Linear(image_dim//4, image_dim//4),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Linear(image_dim//4, image_dim),
-                nn.ReLU(),
+                nn.LeakyReLU(),
                 nn.Linear(image_dim, image_dim), #增加一项全连接层
                 ) 
             )
@@ -532,11 +534,13 @@ class U_decoder(nn.Module):
         self.u_fusion_list = nn.ModuleList()
         for i in range(global_attn_num):
             self.u_fusion_list.append(nn.Sequential(
-                        nn.Linear(decoder_dim*2, decoder_dim//2),
-                        nn.ReLU(),
-                        nn.Linear(decoder_dim//2, decoder_dim//2),
-                        nn.ReLU(),
-                        nn.Linear(decoder_dim//2, decoder_dim),
+                       nn.Conv2d(
+                           decoder_dim*2,
+                           decoder_dim,
+                           kernel_size=1,
+                           bias=False, #根据neck的经验如此
+                       ),
+                       LayerNorm2d(decoder_dim)
                     ))
     
     def forward(self, src1, src2, i):
@@ -556,7 +560,7 @@ class Neck(nn.Module):
                     image_encoder_dim,
                     decoder_dim,
                     kernel_size=1,
-                    bias=True,
+                    bias=False,
                 ),
                 LayerNorm2d(decoder_dim),
                 nn.Conv2d(
@@ -564,7 +568,7 @@ class Neck(nn.Module):
                     decoder_dim,
                     kernel_size=3,
                     padding=1,
-                    bias=True,
+                    bias=False,
                 ),
                 LayerNorm2d(decoder_dim),
             )
