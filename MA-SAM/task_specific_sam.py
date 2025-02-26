@@ -248,7 +248,7 @@ class Task_adapter(nn.Module):
         
             self.mask_adapter_mlp_list.append(nn.ModuleList(
                     [
-                        MLP(decoder_dim, decoder_dim//2, decoder_dim, 3)
+                        MLP(decoder_dim, decoder_dim//4, decoder_dim, 3)
                         for i in range(self.num_mask_tokens)
                     ]
                 )                
@@ -259,8 +259,10 @@ class Task_adapter(nn.Module):
         mask_task_embed = []
         for i in range(self.num_layers):
             image_task_embed.append(self.task_adapter_mlp_list[i](task_embed[i])) # what if we do not give it mean[task_num, dim]
+            mask_tokens = []
             for j in range(self.num_mask_tokens):
-                mask_task_embed.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
+               mask_tokens.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
+            mask_task_embed.append(torch.stack(mask_tokens))
         
         return image_task_embed, mask_task_embed
 
@@ -632,8 +634,9 @@ class Sam_task(nn.Module):
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
+        num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
-        self.task_adapter = Task_adapter(decoder_dim, image_encoder_dim//4, image_encoder_dim, self.global_attn_num+1)
+        self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         
         self.task_specific_embed_list = nn.ParameterList()
