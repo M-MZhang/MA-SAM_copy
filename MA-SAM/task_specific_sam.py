@@ -493,7 +493,9 @@ class MaskDecoder_task(nn.Module):
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
                 # src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
-                src = self.u_fusion(src, image_embeddings[i].flatten(2).permute(0, 2, 1), i-1)
+                src = src.transpose(1,2).view(b, c, h, w)
+                src = self.u_fusion(src,image_embeddings[i], i-1)
+                src = src.flatten(2).permute(0, 2, 1)
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
@@ -544,7 +546,7 @@ class U_decoder(nn.Module):
                     ))
     
     def forward(self, src1, src2, i):
-        src = torch.cat([src1, src2], dim=-1)
+        src = torch.cat([src1, src2], dim=1)
         src = self.u_fusion_list[i](src)
 
         return src
