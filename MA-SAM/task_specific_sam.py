@@ -442,7 +442,7 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(n_transformer)
         
-        self.u_fusion = U_decoder(transformer_dim, num_layer-1) # less than transformer module
+        # self.u_fusion = U_decoder(transformer_dim, num_layer-1) # less than transformer module
            
     
     def forward(
@@ -490,8 +490,8 @@ class MaskDecoder_task(nn.Module):
                 src = src.flatten(2).permute(0,2,1)
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                # src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
-                src = self.u_fusion(src, image_embeddings[i].flatten(2).permute(0, 2, 1), i-1)
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                # src = self.u_fusion(src, image_embeddings[i].flatten(2).permute(0, 2, 1), i-1)
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
