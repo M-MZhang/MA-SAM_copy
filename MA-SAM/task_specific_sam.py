@@ -441,6 +441,8 @@ class MaskDecoder_task(nn.Module):
             )
             
             self.transformer_list.append(n_transformer)
+        
+        self.u_fusion = U_decoder(transformer_dim, num_layer-1) # less than transformer module
            
     
     def forward(
@@ -488,7 +490,8 @@ class MaskDecoder_task(nn.Module):
                 src = src.flatten(2).permute(0,2,1)
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                # src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                src = self.u_fusion(src, image_embeddings[i].flatten(2).permute(0, 2, 1), i-1)
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
@@ -522,29 +525,26 @@ class MaskDecoder_task(nn.Module):
 class U_decoder(nn.Module):
     def __init__(
             self,
-            output_dim : int,
+            decoder_dim: int,
             global_attn_num : int
     ):
         super().__init__()
-        
-        self.u_fusion_list = nn.Sequential(
-                    nn.Conv2d(
-                        global_attn_num,
-                        1,
-                        kernel_size=1,
-                        bias=False,
-                    ),
-                )
+        self.u_fusion_list = nn.ModuleList()
+        for i in range(global_attn_num):
+            self.u_fusion_list.append(nn.Sequential(
+                        nn.Linear(decoder_dim*2, decoder_dim//2),
+                        nn.ReLU(),
+                        nn.Linear(decoder_dim//2, decoder_dim//2),
+                        nn.ReLU(),
+                        nn.Linear(decoder_dim//2, decoder_dim),
+                    ))
     
-    def forward(self, decoder_embeddings):
-        layer_num, b, task_num, h, w = decoder_embeddings.shape
-        re_decoder_embeddings = torch.einsum('l b t h w -> b t l h w', decoder_embeddings)
-        masks = self.u_fusion_list(re_decoder_embeddings.view(b*task_num, layer_num, h, w)) 
-        masks = masks.view(b, task_num, 1, h, w)
-        masks = masks.squeeze(2)
+    def forward(self, src1, src2, i):
+        src = torch.cat([src1, src2], dim=-1)
+        src = self.u_fusion_list[i](src)
 
-        return masks
-
+        return src
+        
 class Neck(nn.Module):
     def __init__(self, image_encoder, image_encoder_dim, decoder_dim, global_attn_num ):
         super().__init__()
@@ -556,7 +556,7 @@ class Neck(nn.Module):
                     image_encoder_dim,
                     decoder_dim,
                     kernel_size=1,
-                    bias=False,
+                    bias=True,
                 ),
                 LayerNorm2d(decoder_dim),
                 nn.Conv2d(
@@ -564,7 +564,7 @@ class Neck(nn.Module):
                     decoder_dim,
                     kernel_size=3,
                     padding=1,
-                    bias=False,
+                    bias=True,
                 ),
                 LayerNorm2d(decoder_dim),
             )
