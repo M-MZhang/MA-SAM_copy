@@ -434,7 +434,7 @@ class MaskDecoder_task(nn.Module):
             ]
         )
     
-        for i in range(num_layer):
+        for i in range(num_layer+1):
             n_transformer = TwoWayTransformer(
                 depth=2,
                 embedding_dim=transformer_dim,
@@ -444,7 +444,7 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(n_transformer)
         
-        self.u_fusion = U_decoder(transformer_dim, num_layer-1) # less than transformer module
+        self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
     
     def forward(
@@ -639,7 +639,7 @@ class Sam_task(nn.Module):
         decoder_dim = sam_model.mask_decoder.mask_tokens.weight.shape[1]
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
-        self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes)
+        self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes) # 4
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
         self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
