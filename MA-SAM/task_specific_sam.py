@@ -493,16 +493,16 @@ class MaskDecoder_task(nn.Module):
                 b, c, h, w = src.shape
                 src = src.flatten(2).permute(0,2,1)
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
-            elif i==0:
-                hs = hs[:, :-self.num_mask_tokens,:] # no mask_task_embed
-                src = src.transpose(1,2).view(b, c, h, w)
-                src = self.u_fusion(src,image_embeddings[i], i-1)
-                src = src.flatten(2).permute(0, 2, 1)
+            # elif i==0:
+            #     hs = hs[:, :-self.num_mask_tokens,:] # no mask_task_embed
+            #     src = src.transpose(1,2).view(b, c, h, w)
+            #     src = self.u_fusion(src,image_embeddings[i], i-1)
+            #     src = src.flatten(2).permute(0, 2, 1)
             else:
-                # src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
-                src = src.transpose(1,2).view(b, c, h, w)
-                src = self.u_fusion(src,image_embeddings[i], i-1)
-                src = src.flatten(2).permute(0, 2, 1)
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                # src = src.transpose(1,2).view(b, c, h, w)
+                # src = self.u_fusion(src,image_embeddings[i], i-1)
+                # src = src.flatten(2).permute(0, 2, 1)
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
@@ -649,7 +649,7 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes) # 4
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
-        self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         
         self.task_specific_embed_list = nn.ParameterList()
@@ -684,7 +684,7 @@ class Sam_task(nn.Module):
             self.w_As.append(w_a_linear_v)
             self.w_Bs.append(w_b_linear_v)
 
-            if layer_i in sam_model.image_encoder.global_attn_indexes:
+            if layer_i in sam_model.image_encoder.global_attn_indexes or layer_i == 0:
                 blk.attn.qkv = _LoRA_qkv_global(
                     w_qkv_linear,
                     w_a_linear_q,
@@ -694,6 +694,12 @@ class Sam_task(nn.Module):
                 )
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
+
+                # task_specific_embed
+                task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
+                nn.init.normal_(task_specific_embed, std=0.02)
+                task_specific_embed = nn.Parameter(task_specific_embed)
+                self.task_specific_embed_list.append(task_specific_embed)
 
             else:
                 blk.attn.qkv = _LoRA_qkv(
@@ -705,12 +711,8 @@ class Sam_task(nn.Module):
                 )
                 # sam_model.image_encoder[layer_i] = blk
             
-            for i in range(self.global_attn_num + 1):
-                # task_specific_embed
-                task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
-                nn.init.normal_(task_specific_embed, std=0.02)
-                task_specific_embed = nn.Parameter(task_specific_embed)
-                self.task_specific_embed_list.append(task_specific_embed)
+            
+                
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
