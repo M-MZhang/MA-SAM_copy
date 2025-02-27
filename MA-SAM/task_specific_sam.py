@@ -250,13 +250,6 @@ class Task_adapter(nn.Module):
                 ) 
             )
         
-            self.mask_adapter_mlp_list.append(nn.ModuleList(
-                    [
-                        MLP(decoder_dim, decoder_dim//4, decoder_dim, 3)
-                        for i in range(self.num_mask_tokens)
-                    ]
-                )                
-            )
     
     def forward(self, task_embed: torch.Tensor):
         image_task_embed = []
@@ -270,7 +263,43 @@ class Task_adapter(nn.Module):
         
         return image_task_embed, mask_task_embed
 
-
+class Mask_adapter(nn.Module):
+    def __init__(self, 
+                num_mask_tokens:int,
+                image_dim:int, 
+                decoder_dim:int,
+                num_layers: int,
+    ):
+        super().__init__()
+        self.mask_adapter_mlp_list = nn.ModuleList()
+        self.neck_list = nn.ModuleList()
+        for i in range(self.num_layers):
+            self.mask_adapter_mlp_list.append(nn.ModuleList(
+                        [
+                            MLP(decoder_dim, decoder_dim//4, decoder_dim, 3)
+                            for i in range(self.num_mask_tokens)
+                        ]
+                    )                
+                )
+            
+            self.neck_list.append(nn.Sequential(
+                nn.Linear(image_dim, image_dim//4),
+                nn.LeakyReLU(),
+                nn.Linear(image_dim//4, image_dim//4),
+                nn.LeakyReLU(),
+                nn.Linear(image_dim//4, decoder_dim),
+            ))
+    
+    def forward(self, task_embed):
+        mask_task_embed = []
+        for i in range(self.num_layers):
+            mask_tokens = []
+            for j in range(self.num_mask_tokens):
+               mask_tokens.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
+            mask_task_embed.append(torch.stack(mask_tokens))
+        
+        return mask_task_embed
+        
 
 class Block_task(nn.Module):
     def __init__(
@@ -592,28 +621,7 @@ class Neck(nn.Module):
         return image_embeddings
 
 
-class Mask_adapter(nn.Module):
-    def __init__(self, decoder_dim, global_attn_num):
-        super().__init__()
-        #mask_decoder
-        self.mask_adapter_list = nn.ModuleList()
-        for i in range(global_attn_num):
-            mask_adapter = nn.Sequential(
-                nn.Linear(decoder_dim, decoder_dim//4),
-                nn.GELU(),
-                nn.Linear(decoder_dim//4, decoder_dim),
-                nn.GELU(),
-                nn.Linear(decoder_dim, decoder_dim),
-                # nn.LayerNorm(decoder_dim),
-            )
-            self.mask_adapter_list.append(mask_adapter)
-    
-    def forward(self, task_specific_embed):
-        mask_tokens = []
-        for layer, task_embed in zip(self.mask_adapter_list, task_specific_embed):
-            mask_tokens.append(layer(task_embed))
 
-        return mask_tokens
 
 
 
