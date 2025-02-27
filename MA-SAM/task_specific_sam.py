@@ -206,14 +206,14 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.init_layers:
+            if i in self.init_layers or i==0:
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
-                if i == 0:
-                    outputs.append(x)
+                # if i == 0:
+                #     outputs.append(x)
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
@@ -770,17 +770,17 @@ class Sam_task(nn.Module):
         return outputs
     
     def init_weights(self):
-        task_adapter = self.task_adapter.task_adapter_mlp_list
-        mask_adapter = self.task_adapter.mask_adapter_mlp_list
-        layers = len(task_adapter)
-        for layer in range(layers):
-            nn.init.constant_(task_adapter[layer][-1].weight, 0)
-            nn.init.constant_(task_adapter[layer][-1].bias, 0)
+        # task_adapter = self.task_adapter.task_adapter_mlp_list
+        # mask_adapter = self.task_adapter.mask_adapter_mlp_list
+        # layers = len(task_adapter)
+        # for layer in range(layers):
+        #     nn.init.constant_(task_adapter[layer][-1].weight, 0)
+        #     nn.init.constant_(task_adapter[layer][-1].bias, 0)
             
-        #     #init the mask_adapter
-            for item in mask_adapter[layer]:
-                nn.init.constant_(item[-1].weight, 0)
-                nn.init.constant_(item[-1].weight, 0)
+        # #     #init the mask_adapter
+        #     for item in mask_adapter[layer]:
+        #         nn.init.constant_(item[-1].weight, 0)
+        #         nn.init.constant_(item[-1].weight, 0)
         
         for w_A in self.w_As:
             nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
