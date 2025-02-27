@@ -296,11 +296,12 @@ class Mask_adapter(nn.Module):
     
     def forward(self, task_embed):
         mask_task_embed = []
+        mask_embed = []
         for i in range(self.num_layers):
-            task_embed[i] = self.neck_list[i](task_embed[i]) # image_dim -> 256
+            mask_embed.append(self.neck_list[i](task_embed[i]))# image_dim -> 256
             mask_tokens = []
             for j in range(self.num_mask_tokens):
-               mask_tokens.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
+               mask_tokens.append(self.mask_adapter_mlp_list[i][j](mask_embed[i][j]))
             mask_task_embed.append(torch.stack(mask_tokens))
         
         return mask_task_embed
