@@ -271,13 +271,17 @@ class Mask_adapter(nn.Module):
                 num_layers: int,
     ):
         super().__init__()
+        self.num_layers = num_layers
+        self.num_mask_tokens = num_mask_tokens
+        
+        
         self.mask_adapter_mlp_list = nn.ModuleList()
         self.neck_list = nn.ModuleList()
-        for i in range(self.num_layers):
+        for i in range(num_layers):
             self.mask_adapter_mlp_list.append(nn.ModuleList(
                         [
                             MLP(decoder_dim, decoder_dim//4, decoder_dim, 3)
-                            for i in range(self.num_mask_tokens)
+                            for i in range(num_mask_tokens)
                         ]
                     )                
                 )
@@ -293,6 +297,7 @@ class Mask_adapter(nn.Module):
     def forward(self, task_embed):
         mask_task_embed = []
         for i in range(self.num_layers):
+            task_embed[i] = self.neck_list[i](task_embed[i]) # image_dim -> 256
             mask_tokens = []
             for j in range(self.num_mask_tokens):
                mask_tokens.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
@@ -475,7 +480,7 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(n_transformer)
         
-        self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
+        # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
     
     def forward(
@@ -522,16 +527,8 @@ class MaskDecoder_task(nn.Module):
                 b, c, h, w = src.shape
                 src = src.flatten(2).permute(0,2,1)
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
-            # elif i==0:
-            #     hs = hs[:, :-self.num_mask_tokens,:] # no mask_task_embed
-            #     src = src.transpose(1,2).view(b, c, h, w)
-            #     src = self.u_fusion(src,image_embeddings[i], i-1)
-            #     src = src.flatten(2).permute(0, 2, 1)
             else:
                 src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
-                # src = src.transpose(1,2).view(b, c, h, w)
-                # src = self.u_fusion(src,image_embeddings[i], i-1)
-                # src = src.flatten(2).permute(0, 2, 1)
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
@@ -621,10 +618,6 @@ class Neck(nn.Module):
         return image_embeddings
 
 
-
-
-
-
 class Sam_task(nn.Module):
     mask_threshold: float = 0.0
     image_format: str = "RGB"
@@ -657,7 +650,8 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes) # 4
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
-        self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
+        # self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
+        self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
         self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         
         self.task_specific_embed_list = nn.ParameterList()
@@ -704,7 +698,8 @@ class Sam_task(nn.Module):
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
                 # task_specific_embed
-                task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
+                # task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
+                task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
@@ -745,9 +740,9 @@ class Sam_task(nn.Module):
         input_images = self.sam.preprocess(batched_input)
 
         # get image and mask task_embeds
-        image_task_embed, mask_task_embed = self.task_adapter(self.task_specific_embed_list)
+        mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
-        image_embeddings = self.sam.image_encoder(input_images, image_task_embed) #
+        image_embeddings = self.sam.image_encoder(input_images, self.task_specific_embed_list) #
         image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
