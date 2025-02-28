@@ -802,7 +802,8 @@ class Sam_task(nn.Module):
         
         task_adapter_tensors = {}
         neck_list_tensors = {}
-        u_decoder_tensors = {}
+        prompt_encoder_tensors = {}
+        # u_decoder_tensors = {}
         mask_decoder_tensors = {}
         # mask_adapter_tensors = {}
 
@@ -815,16 +816,15 @@ class Sam_task(nn.Module):
         for key, value in self_state_dict.items():
             if 'Neck_list' in key:
                 neck_list_tensors[key] = value
-            if 'u_decoder' in key:
-                u_decoder_tensors[key] = value
+            if 'prompt_encoder' in key:
+                prompt_encoder_tensors[key] = value
             if 'task_adapter' in key:
                 task_adapter_tensors[key] = value
-            if 'mask_decoder' in key:
+            if 'mask_decoder' in key and 'sam' not in key:
                 mask_decoder_tensors[key] = value
-            # if 'mask_adapter' in key:
-            #     mask_adapter_tensors[key] = value
+        
 
-        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **u_decoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
