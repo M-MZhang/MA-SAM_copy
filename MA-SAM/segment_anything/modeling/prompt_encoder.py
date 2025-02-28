@@ -178,7 +178,7 @@ class PositionEmbeddingRandom(nn.Module):
         if scale is None or scale <= 0.0:
             scale = 1.0
         self.register_buffer(
-            "positional_encoding_gaussian_matrix",
+            "positional_encoding_gaussian_matrix", # 不可训练
             scale * torch.randn((2, num_pos_feats)),
         )
 
