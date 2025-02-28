@@ -206,7 +206,7 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.init_layers or i==0:
+            if i in self.init_layers:
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
@@ -282,8 +282,8 @@ class Mask_adapter(nn.Module):
                         [
                             MLP(decoder_dim, decoder_dim//4, decoder_dim, 3)
                             for i in range(num_mask_tokens)
-                        ]
-                    )                
+                        ]    
+                    )          
                 )
             
             self.neck_list.append(nn.Sequential(
@@ -471,7 +471,7 @@ class MaskDecoder_task(nn.Module):
             ]
         )
     
-        for i in range(num_layer+1):
+        for i in range(num_layer):
             n_transformer = TwoWayTransformer(
                 depth=2,
                 embedding_dim=transformer_dim,
@@ -586,11 +586,11 @@ class U_decoder(nn.Module):
         return src
         
 class Neck(nn.Module):
-    def __init__(self, image_encoder, image_encoder_dim, decoder_dim, global_attn_num ):
+    def __init__(self, image_encoder, image_encoder_dim, decoder_dim, global_attn_num):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
-        for i in range(global_attn_num-1):
+        for i in range(global_attn_num-1): 
             neck = nn.Sequential(
                 nn.Conv2d(
                     image_encoder_dim,
@@ -608,7 +608,7 @@ class Neck(nn.Module):
                 ),
                 LayerNorm2d(decoder_dim),
             )
-            self.image_neck_list.append(neck)
+            self.image_neck_list.append(neck) # 这里用的是原版的neck,但是感觉好像也没啥好处？
         
         self.image_neck_list.append(image_encoder.neck) # init the last neck conv by original one
         
@@ -653,7 +653,7 @@ class Sam_task(nn.Module):
         
         # self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num+1)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
 
@@ -687,7 +687,7 @@ class Sam_task(nn.Module):
             self.w_As.append(w_a_linear_v)
             self.w_Bs.append(w_b_linear_v)
 
-            if layer_i in sam_model.image_encoder.global_attn_indexes or layer_i == 0:
+            if layer_i in sam_model.image_encoder.global_attn_indexes:
                 blk.attn.qkv = _LoRA_qkv_global(
                     w_qkv_linear,
                     w_a_linear_q,
@@ -713,10 +713,7 @@ class Sam_task(nn.Module):
                     w_a_linear_v,
                     w_b_linear_v,
                 )
-                # sam_model.image_encoder[layer_i] = blk
-            
-            
-                
+                # sam_model.image_encoder[layer_i] = blk     
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
@@ -774,17 +771,17 @@ class Sam_task(nn.Module):
         return outputs
     
     def init_weights(self):
-        # task_adapter = self.task_adapter.task_adapter_mlp_list
+        # task_adapter = self.task_adapter.neck_list
         # mask_adapter = self.task_adapter.mask_adapter_mlp_list
         # layers = len(task_adapter)
         # for layer in range(layers):
         #     nn.init.constant_(task_adapter[layer][-1].weight, 0)
         #     nn.init.constant_(task_adapter[layer][-1].bias, 0)
             
-        # #     #init the mask_adapter
+        #  #init the mask_adapter
         #     for item in mask_adapter[layer]:
-        #         nn.init.constant_(item[-1].weight, 0)
-        #         nn.init.constant_(item[-1].weight, 0)
+        #         nn.init.constant_(item.layers[-1].weight, 0)
+        #         nn.init.constant_(item.layers[-1].weight, 0)
         
         for w_A in self.w_As:
             nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
