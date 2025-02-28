@@ -816,7 +816,7 @@ class Sam_task(nn.Module):
         for key, value in self_state_dict.items():
             if 'Neck_list' in key:
                 neck_list_tensors[key] = value
-            if 'prompt_encoder' in key:
+            if 'prompt_encoder.no_mask_embed' in key:
                 prompt_encoder_tensors[key] = value
             if 'task_adapter' in key:
                 task_adapter_tensors[key] = value
@@ -865,13 +865,13 @@ class Sam_task(nn.Module):
         sam_dict.update(neck_list_state_dict)
 
         # load prompt_encoder
-        prompt_encoder_keys = [k for k in sam_keys if 'u_decoder' in k]
+        prompt_encoder_keys = [k for k in sam_keys if 'prompt_encoder.no_mask_embed' in k]
         prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
         prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
         sam_dict.update(prompt_encoder_state_dict)
 
         # load mask_decoder
-        mask_decoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
+        mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k]
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
