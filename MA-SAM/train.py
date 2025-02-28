@@ -21,7 +21,7 @@ parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/RawData/T
 parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/Vanille_me_v6.6_3debug')
 parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/RawData/Training')
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
-parser.add_argument('--batch_size', type=int, default=16, help='batch_size per gpu')
+parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=4, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0012, help='segmentation network learning rate')
 
@@ -33,7 +33,7 @@ parser.add_argument('--img_size', type=int, default=512, help='input patch size 
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--vit_name', type=str, default='vit_h', help='select one vit model')
 parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
-parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/Vanille_me_v6.6_3debug/epoch_9.pth', help='Finetuned checkpoint')
+parser.add_argument('--adapt_ckpt', type=str, default=None, help='Finetuned checkpoint')
 parser.add_argument('--rank', type=int, default=32, help='Rank for FacT')
 parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')
 parser.add_argument('--warmup', action='store_true', help='If activated, warp up the learning from a lower lr to the base_lr')
