@@ -171,17 +171,17 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.1/epoch_0.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v6.6_3debug/epoch209_pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
-    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v5.1/test')
+    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v6.6_3debug/epoch209_pth')
     parser.add_argument('--num_classes', type=int, default=12)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_b_01ec64.pth', help='Pretrained checkpoint')
-    parser.add_argument('--vit_name', type=str, default='vit_b', help='Select one vit model')
+    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939', help='Pretrained checkpoint')
+    parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
     parser.add_argument('--module', type=str, default='task_specific_sam')
