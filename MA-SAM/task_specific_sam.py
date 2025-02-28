@@ -864,23 +864,18 @@ class Sam_task(nn.Module):
         neck_list_state_dict = {k:v for k, v in zip(neck_list_keys, neck_list_values)}
         sam_dict.update(neck_list_state_dict)
 
-        # load u_decoder
-        u_decoder_keys = [k for k in sam_keys if 'u_decoder' in k]
-        u_decoder_values = [state_dict[k] for k in u_decoder_keys]
-        u_decoder_state_dict = {k:v for k, v in zip(u_decoder_keys, u_decoder_values)}
-        sam_dict.update(u_decoder_state_dict)
+        # load prompt_encoder
+        prompt_encoder_keys = [k for k in sam_keys if 'u_decoder' in k]
+        prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
+        prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
+        sam_dict.update(prompt_encoder_state_dict)
 
         # load mask_decoder
-        mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k]
+        mask_decoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
 
-        #load mask_adapter
-        # mask_adapter_keys = [k for k in sam_keys if 'mask_adapter' in k]
-        # mask_adapter_values = [state_dict[k] for k in mask_adapter_keys]
-        # mask_adapter_state_dict = {k:v for k,v in zip(mask_adapter_keys, mask_adapter_values)}
-        # sam_dict.update(mask_adapter_state_dict)
 
         self.load_state_dict(sam_dict)
 

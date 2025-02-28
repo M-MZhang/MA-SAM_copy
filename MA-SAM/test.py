@@ -171,16 +171,16 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v6.6_3debug/epoch209_pth', help='The checkpoint after adaptation')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/epoch_209.pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
-    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v6.6_3debug/epoch209_pth')
+    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v6.6_3debug')
     parser.add_argument('--num_classes', type=int, default=12)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939', help='Pretrained checkpoint')
+    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
     parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
@@ -199,9 +199,6 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     
-    args.output_dir = '/'.join(args.adapt_ckpt.split('/')[:-1])+'/test'
-    if not os.path.exists(args.output_dir):
-        os.mkdir(args.output_dir)
 
     # register model
     sam, img_embedding_size = sam_model_registry[args.vit_name](image_size=args.img_size,
@@ -210,13 +207,12 @@ if __name__ == '__main__':
                                                                 pixel_std=[1., 1., 1.])
     
     pkg = import_module(args.module)
-    net = pkg.Sam_task(sam).cuda() 
+    net = pkg.Sam_task(sam, r=4).cuda() 
     # net = sam.cuda()
 
     assert args.adapt_ckpt is not None
     net.load_parameters(args.adapt_ckpt)
-    # state_dict = torch.load(args.adapt_ckpt)
-    # net.load_state_dict(state_dict)
+   
 
     if args.num_classes > 1:
         multimask_output = True
@@ -226,10 +222,10 @@ if __name__ == '__main__':
     # initialize log_folder
     log_folder = os.path.join(args.output_dir, 'testing_log')
     if not os.path.exists(log_folder):
-        os.mkdir(log_folder)
+        os.makedirs(log_folder)
     # time
     output_filename = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    logging.basicConfig(filename= log_folder + '/testing_log/' +args.adapt_ckpt.split('/')[-2] + '_' + output_filename +'_log.txt', level=logging.INFO,
+    logging.basicConfig(filename= log_folder+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
