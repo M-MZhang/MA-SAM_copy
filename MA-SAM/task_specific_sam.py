@@ -305,7 +305,7 @@ class Mask_adapter(nn.Module):
             ]
         )
 
-        self.mask_adapter_mlp_list.extend([mask_adpater1, mask_adapter2, mask_adapter3, mask_adapter4])
+        self.mask_adapter_mlp_list.extend([mask_adapter4, mask_adapter3, mask_adapter2, mask_adpater1])
     
     def forward(self, task_embed):
         mask_task_embed = []
@@ -483,22 +483,22 @@ class MaskDecoder_task(nn.Module):
                 depth=2,
                 embedding_dim= encoder_dim//16,
                 mlp_dim=512,
-                num_heads=8,
+                num_heads=4,
             )
         
         transformer4 = TwoWayTransformer(
                 depth=2,
                 embedding_dim= encoder_dim//32,
                 mlp_dim=256,
-                num_heads=8,
+                num_heads=4,
             )
 
         self.transformer_list.extend([transformer1, transformer2, transformer3, transformer4])
 
-        mask_tokens1 = nn.Embedding(self.num_mask_tokens, encoder_dim//4)
-        mask_tokens2 = nn.Embedding(self.num_mask_tokens, encoder_dim//8)
-        mask_tokens3 = nn.Embedding(self.num_mask_tokens, encoder_dim//16)
-        mask_tokens4 = nn.Embedding(self.num_mask_tokens, encoder_dim//32)
+        mask_tokens1 = nn.Embedding(self.num_mask_tokens, encoder_dim//32)
+        mask_tokens2 = nn.Embedding(self.num_mask_tokens, encoder_dim//16)
+        mask_tokens3 = nn.Embedding(self.num_mask_tokens, encoder_dim//8)
+        mask_tokens4 = nn.Embedding(self.num_mask_tokens, encoder_dim//4)
         self.mask_tokens_list.extend([mask_tokens1, mask_tokens2, mask_tokens3, mask_tokens4])
 
 
@@ -550,9 +550,9 @@ class MaskDecoder_task(nn.Module):
         
         # Expand per-image data in batch direction to be per-mask
         mask_embed = task_specific_embed[index].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
-        hs = torch.cat((output_tokens, sparse_prompt_embeddings, mask_embed), dim=1)
+        hs = torch.cat((output_tokens, mask_embed), dim=1) # 取消这个sparse_embedding，可以做同纬度的就可以保留
         src = torch.repeat_interleave(image_embeddings[index], hs.shape[0], dim=0)
-        src = src + dense_prompt_embeddings
+        # src = src + dense_prompt_embeddings  这里也取消掉原本的no_mask_embedding
         b, c, h, w = src.shape
         src = src.flatten(2).permute(0,2,1)
         pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
