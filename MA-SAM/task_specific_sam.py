@@ -540,6 +540,7 @@ class U_decoder(nn.Module):
         self.image_fusion_list = nn.ModuleList()
         self.mask_fusion_list = nn.ModuleList()
         self.num_mask_tokens = num_mask_tokens
+        self.num_layer = global_attn_num
        
 
         for i in range(global_attn_num):
@@ -594,8 +595,8 @@ class U_decoder(nn.Module):
         
     
     def forward(self, src, mask_tokens):
-        num_layer = src.shape[0]
-        for i in range(num_layer-1, -1, 0):
+        
+        for i in range(self.num_layer-1, -1, 0):
             src[i-1] = self.image_fusion_list[i](torch.cat([src[i], src[i-1]], dim=1))
 
             raw_mask_token = torch.cat([mask_tokens[i],mask_tokens[i-1]], dim=-1)
@@ -603,7 +604,7 @@ class U_decoder(nn.Module):
             for j in range(self.num_mask_tokens):
                 tokens.append(self.mask_fusion_list[i][j](raw_mask_token[:, j, :]))
             mask_tokens[i-1] = torch.stack(tokens, dim=1)
-            
+
         upscaled_src = self.output_upscaling(src[0])
         hyper_in_list = []
         for i in range(self.num_mask_tokens):
