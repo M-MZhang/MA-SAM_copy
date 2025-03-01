@@ -866,7 +866,7 @@ class Sam_task(nn.Module):
                     s
                 )
                 blk.attn = _Fact_Attention(blk.attn)
-                sam_model.image_encoder[layer_i] = _Fact_Block(blk)     
+                sam_model.image_encoder.blocks[layer_i] = _Fact_Block(blk)     
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes, self.FacTu, self.FacTv)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
