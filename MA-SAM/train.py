@@ -32,7 +32,7 @@ parser.add_argument('--deterministic', type=int, default=1, help='whether use de
 parser.add_argument('--img_size', type=int, default=512, help='input patch size of network input')
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--vit_name', type=str, default='vit_h', help='select one vit model')
-parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4meidicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
+parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
 parser.add_argument('--adapt_ckpt', type=str, default=None, help='Finetuned checkpoint')
 parser.add_argument('--rank', type=int, default=32, help='Rank for FacT')
 parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')

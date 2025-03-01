@@ -475,21 +475,21 @@ class MaskDecoder_task(nn.Module):
         transformer2 = TwoWayTransformer(
                 depth=2,
                 embedding_dim= encoder_dim//8,
-                mlp_dim=2048,
+                mlp_dim=1024,
                 num_heads=8,
             )
         
         transformer3 = TwoWayTransformer(
                 depth=2,
                 embedding_dim= encoder_dim//16,
-                mlp_dim=2048,
+                mlp_dim=512,
                 num_heads=8,
             )
         
         transformer4 = TwoWayTransformer(
                 depth=2,
                 embedding_dim= encoder_dim//32,
-                mlp_dim=2048,
+                mlp_dim=256,
                 num_heads=8,
             )
 
@@ -502,7 +502,7 @@ class MaskDecoder_task(nn.Module):
         self.mask_tokens_list.extend([mask_tokens1, mask_tokens2, mask_tokens3, mask_tokens4])
 
 
-        self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
+        self.u_fusion = U_decoder(encoder_dim, num_layer) # less than transformer module
            
     
     def forward(
@@ -639,8 +639,8 @@ class U_decoder(nn.Module):
             up_image = self.image_up_list[i](src[i])
             src[i-1] = self.image_fusion_list[i](torch.cat([up_image, src[i-1]], dim=1))
 
-            down_mask_tokens = self.mask_down_list[i](mask_tokens[i])
-            mask_tokens[i-1] = self.mask_fusion_list[i](torch.cat([down_mask_tokens, mask_tokens[i-1]], dim=-1))
+            down_mask_tokens = F.relu(self.mask_down_list[i](mask_tokens[i]))
+            mask_tokens[i-1] = F.relu(self.mask_fusion_list[i](torch.cat([down_mask_tokens, mask_tokens[i-1]], dim=-1)))
         
         b, c, h, w = src[0].shape
         src[0] = src[0].flatten(2).view(b, c, h*w) # b, h*w, c
@@ -649,7 +649,7 @@ class U_decoder(nn.Module):
         return masks
         
 class Neck(nn.Module):
-    def __init__(self, image_encoder, image_encoder_dim, decoder_dim, global_attn_num):
+    def __init__(self, image_encoder_dim):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
@@ -735,7 +735,7 @@ class Sam_task(nn.Module):
         
         # self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.Neck_list = Neck(image_encoder_dim)
         
         self.task_specific_embed_list = nn.ParameterList()
 
@@ -798,7 +798,7 @@ class Sam_task(nn.Module):
                 # sam_model.image_encoder[layer_i] = blk     
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
-        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
+        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim, image_encoder_dim)
         
         self.sam = sam_model
 
