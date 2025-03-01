@@ -430,7 +430,7 @@ class _Fact_Attention_task(nn.Module):
         super().__init__()
         self.Attention = Attention
 
-    def forward(self, x: torch.Tensor, FacTu, FacTv) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, task_embed:torch.Tensor, FacTu, FacTv) -> torch.Tensor:
         B, H, W, _ = x.shape
         task_num, dim = task_embed.shape
         # concate task_embed
@@ -445,7 +445,7 @@ class _Fact_Attention_task(nn.Module):
         attn = (q * self.Attention.scale) @ k.transpose(-2, -1)
 
         if self.Attention.use_rel_pos:
-            attn = add_decomposed_rel_pos(attn[:, :-task_num, :-task_num], q[:, :-task_num, :], self.Attention.rel_pos_h, self.Attention.rel_pos_w, (H, W), (H, W))
+            attn[:,:-task_num,:-task_num] = add_decomposed_rel_pos(attn[:, :-task_num, :-task_num], q[:, :-task_num, :], self.Attention.rel_pos_h, self.Attention.rel_pos_w, (H, W), (H, W))
 
         attn = attn.softmax(dim=-1)
         x = attn @ v
@@ -936,9 +936,9 @@ class Sam_task(nn.Module):
         #         nn.init.constant_(item.layers[-1].weight, 0)
         #         nn.init.constant_(item.layers[-1].weight, 0)
         
-        for w_A in self.w_As:
+        for w_A in self.q_FacTs:
             nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
-        for w_B in self.w_Bs:
+        for w_B in self.v_FacTs:
             nn.init.zeros_(w_B.weight)
         
 
