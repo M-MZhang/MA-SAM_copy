@@ -277,42 +277,30 @@ class Mask_adapter(nn.Module):
         
         self.mask_adapter_mlp_list = nn.ModuleList()
         self.neck_list = nn.ModuleList()
-        mask_adpater1 = nn.ModuleList(
-            [
-                MLP(image_dim, image_dim//4, image_dim//4, 2)
-                for i in range(self.num_mask_tokens)
-            ]
-        )
+        for i in range(num_layers):
+            neck = nn.Sequential(
+                nn.Linear(image_dim, image_dim//4),
+                nn.LeakyReLU(),
+                nn.Linear(image_dim//4, decoder_dim)
+            )
 
-        mask_adapter2 = nn.ModuleList(
-            [
-                MLP(image_dim, image_dim//4, image_dim//8, 2)
-                for i in range(self.num_mask_tokens)
-            ]
-        )
+            mask_adapter = nn.ModuleList(
+                [
+                    MLP(decoder_dim, decoder_dim//4, decoder_dim, 3)
+                    for i in range(self.num_mask_tokens)
+                ]
+            )
 
-        mask_adapter3 = nn.ModuleList(
-            [
-                MLP(image_dim, image_dim//4, image_dim//16, 2)
-                for i in range(self.num_mask_tokens)
-            ]
-        )
-
-        mask_adapter4 = nn.ModuleList(
-            [
-                MLP(image_dim, image_dim//8, image_dim//32, 2)
-                for i in range(self.num_mask_tokens)
-            ]
-        )
-
-        self.mask_adapter_mlp_list.extend([mask_adapter4, mask_adapter3, mask_adapter2, mask_adpater1])
+            self.mask_adapter_mlp_list.append(mask_adapter)
+            self.neck_list.append(neck)
     
     def forward(self, task_embed):
         mask_task_embed = []
         for i in range(self.num_layers):
             mask_tokens = []
+            mask_embed = self.neck_list[i](task_embed[i])
             for j in range(self.num_mask_tokens):
-               mask_tokens.append(self.mask_adapter_mlp_list[i][j](task_embed[i][j]))
+               mask_tokens.append(self.mask_adapter_mlp_list[i][j](mask_embed[j]))
             mask_task_embed.append(torch.stack(mask_tokens))
         
         return mask_task_embed
@@ -459,50 +447,23 @@ class MaskDecoder_task(nn.Module):
         self.num_layer = num_layer
         
         self.transformer_list = nn.ModuleList()
-        
-        # self.iou_tokens = nn.Embedding(1, transformer_dim)
-        # self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
         self.mask_tokens_list = nn.ParameterList()
-        # self.iou_prediction_head = MaskDecoder.iou_prediction_head
-
-        transformer1 = TwoWayTransformer(
+      
+        for i in range(num_layer):
+            transform = TwoWayTransformer(
                 depth=2,
-                embedding_dim= encoder_dim//4,
+                embedding_dim=transformer_dim,
                 mlp_dim=2048,
                 num_heads=8,
             )
 
-        transformer2 = TwoWayTransformer(
-                depth=2,
-                embedding_dim= encoder_dim//8,
-                mlp_dim=1024,
-                num_heads=8,
-            )
-        
-        transformer3 = TwoWayTransformer(
-                depth=2,
-                embedding_dim= encoder_dim//16,
-                mlp_dim=512,
-                num_heads=4,
-            )
-        
-        transformer4 = TwoWayTransformer(
-                depth=2,
-                embedding_dim= encoder_dim//32,
-                mlp_dim=256,
-                num_heads=4,
-            )
+            self.transformer_list.append(transform)
 
-        self.transformer_list.extend([transformer1, transformer2, transformer3, transformer4])
-
-        mask_tokens1 = nn.Embedding(self.num_mask_tokens, encoder_dim//32)
-        mask_tokens2 = nn.Embedding(self.num_mask_tokens, encoder_dim//16)
-        mask_tokens3 = nn.Embedding(self.num_mask_tokens, encoder_dim//8)
-        mask_tokens4 = nn.Embedding(self.num_mask_tokens, encoder_dim//4)
-        self.mask_tokens_list.extend([mask_tokens1, mask_tokens2, mask_tokens3, mask_tokens4])
+            mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
+            self.mask_tokens_list.append(mask_tokens)
 
 
-        self.u_fusion = U_decoder(encoder_dim, num_layer) # less than transformer module
+        self.u_fusion = U_decoder(transformer_dim, num_layer, self.num_mask_tokens) # less than transformer module
            
     
     def forward(
@@ -552,7 +513,7 @@ class MaskDecoder_task(nn.Module):
         mask_embed = task_specific_embed[index].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         hs = torch.cat((output_tokens, mask_embed), dim=1) # 取消这个sparse_embedding，可以做同纬度的就可以保留
         src = torch.repeat_interleave(image_embeddings[index], hs.shape[0], dim=0)
-        # src = src + dense_prompt_embeddings  这里也取消掉原本的no_mask_embedding
+        src = src + dense_prompt_embeddings  
         b, c, h, w = src.shape
         src = src.flatten(2).permute(0,2,1)
         pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
@@ -570,129 +531,113 @@ class MaskDecoder_task(nn.Module):
 class U_decoder(nn.Module):
     def __init__(
             self,
-            encoder_dim:int,
-            global_attn_num : int
+            decoder_dim:int,
+            global_attn_num : int,
+            num_mask_tokens:int,
     ):
         super().__init__()
-        self.image_up_list = nn.ModuleList()
+       
         self.image_fusion_list = nn.ModuleList()
         self.mask_fusion_list = nn.ModuleList()
-        self.mask_down_list = nn.ModuleList()
+        self.num_mask_tokens = num_mask_tokens
+       
+
+        for i in range(global_attn_num):
+            image_fusion = nn.Sequential(
+                nn.Conv2d(
+                decoder_dim * 2,
+                decoder_dim,
+                kernel_size=1,
+                bias=False,
+            ),
+            LayerNorm2d(decoder_dim),
+            nn.Conv2d(
+                decoder_dim,
+                decoder_dim,
+                kernel_size=3,
+                padding=1,
+                bias=False,
+            ),
+            LayerNorm2d(decoder_dim),
+            )
+
+            self.image_fusion_list.append(image_fusion)
+
+            mask_fusion = nn.ModuleList(
+                [
+                    MLP(decoder_dim*2, decoder_dim//2, decoder_dim, 2)
+                    for i in range(num_mask_tokens)
+                ]
+            )
+            self.mask_fusion_list.append(mask_fusion)
         
-
-        i_up1 = nn.Sequential(
-            nn.ConvTranspose2d(encoder_dim//4, encoder_dim//8, kernel_size=2, stride=2),
-            LayerNorm2d(encoder_dim//8),
+        self.output_upscaling = nn.Sequential(
+            nn.ConvTranspose2d(decoder_dim, decoder_dim // 4, kernel_size=2, stride=2),
+            LayerNorm2d(decoder_dim // 4),
+            nn.GELU(),
+            nn.ConvTranspose2d(decoder_dim // 4, decoder_dim // 8, kernel_size=2, stride=2),
+            LayerNorm2d(decoder_dim // 8),
+            nn.GELU(),
+            nn.ConvTranspose2d(decoder_dim // 8, decoder_dim // 16, kernel_size=2, stride=2),
+            LayerNorm2d(decoder_dim // 16),
+            nn.GELU(),
+            nn.ConvTranspose2d(decoder_dim // 16, decoder_dim // 32, kernel_size=2, stride=2),
             nn.GELU(),
         )
-        i_fusion1 = nn.Sequential(
-            nn.Conv2d(encoder_dim//4,encoder_dim//8,kernel_size=1,bias=False,),
-            LayerNorm2d(encoder_dim//8),
-            nn.Conv2d(encoder_dim//8,encoder_dim//8,kernel_size=3,padding=1,bias=False),
-            LayerNorm2d(encoder_dim//8)
+        self.output_hypernetworks_mlps = nn.ModuleList(
+            [
+                MLP(decoder_dim, decoder_dim, decoder_dim // 32, 3)
+                for i in range(self.num_mask_tokens)
+            ]
         )
-
-        i_up2 = nn.Sequential(
-            nn.ConvTranspose2d(encoder_dim//8, encoder_dim//16, kernel_size=2, stride=2),
-            LayerNorm2d(encoder_dim//16),
-            nn.GELU(),
-        )
-        i_fusion2 = nn.Sequential(
-            nn.Conv2d(encoder_dim//8,encoder_dim//16,kernel_size=1,bias=False,),
-            LayerNorm2d(encoder_dim//16),
-            nn.Conv2d(encoder_dim//16,encoder_dim//16,kernel_size=3,padding=1,bias=False),
-            LayerNorm2d(encoder_dim//16)
-        )
-
-        i_up3 = nn.Sequential(
-            nn.ConvTranspose2d(encoder_dim//16, encoder_dim//32, kernel_size=2, stride=2),
-            LayerNorm2d(encoder_dim//32),
-            nn.GELU(),
-        )
-        i_fusion3 = nn.Sequential(
-            nn.Conv2d(encoder_dim//16,encoder_dim//32,kernel_size=1,bias=False,),
-            LayerNorm2d(encoder_dim//32),
-            nn.Conv2d(encoder_dim//32,encoder_dim//32,kernel_size=3,padding=1,bias=False),
-            LayerNorm2d(encoder_dim//32)
-        )
-
-        self.image_up_list.extend([i_up3, i_up2, i_up1])
-        self.image_fusion_list.extend([i_fusion3, i_fusion2, i_fusion1])
-
-        mask_down1 = nn.Linear(encoder_dim//4, encoder_dim//8)
-        mask_down2 = nn.Linear(encoder_dim//8, encoder_dim//16)
-        mask_down3 = nn.Linear(encoder_dim//16, encoder_dim//32)
-
-        mask_fusion1 = nn.Linear(encoder_dim//4, encoder_dim//8)
-        mask_fusion2 = nn.Linear(encoder_dim//8, encoder_dim//16)
-        mask_fusion3 = nn.Linear(encoder_dim//16, encoder_dim//32)
-
-        self.mask_down_list.extend([mask_down3, mask_down2, mask_down1])
-        self.mask_fusion_list.extend([mask_fusion3, mask_fusion2, mask_fusion1])
-        
         
         
     
     def forward(self, src, mask_tokens):
         num_layer = src.shape[0]
         for i in range(num_layer-1, -1, 0):
-            up_image = self.image_up_list[i](src[i])
-            src[i-1] = self.image_fusion_list[i](torch.cat([up_image, src[i-1]], dim=1))
+            src[i-1] = self.image_fusion_list[i](torch.cat([src[i], src[i-1]], dim=1))
 
-            down_mask_tokens = F.relu(self.mask_down_list[i](mask_tokens[i]))
-            mask_tokens[i-1] = F.relu(self.mask_fusion_list[i](torch.cat([down_mask_tokens, mask_tokens[i-1]], dim=-1)))
-        
-        b, c, h, w = src[0].shape
-        src[0] = src[0].flatten(2).view(b, c, h*w) # b, h*w, c
-        masks = (mask_tokens[0] @ src[0]).view(b, -1, h, w)
+            raw_mask_token = torch.cat([mask_tokens[i],mask_tokens[i-1]], dim=-1)
+            tokens = []
+            for j in range(self.num_mask_tokens):
+                tokens.append(self.mask_fusion_list[i][j](raw_mask_token[:, j, :]))
+            mask_tokens[i-1] = torch.stack(tokens, dim=1)
+            
+        upscaled_src = self.output_upscaling(src[0])
+        hyper_in_list = []
+        for i in range(self.num_mask_tokens):
+            hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens[0][:,i,:]))
+        hyper_in = torch.stack(hyper_in_list, dim=1)
+        b, c, h, w = upscaled_src.shape  # [h, c, h, w]
+        masks = (hyper_in @ upscaled_src.view(b, c, h * w)).view(b, -1, h, w)
         
         return masks
         
 class Neck(nn.Module):
-    def __init__(self, image_encoder_dim):
+    def __init__(self,embed_dim, out_chans, global_attn_layer):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
-        self.neck1 = nn.Sequential(
-            nn.ConvTranspose2d(image_encoder_dim, image_encoder_dim // 4, kernel_size=2, stride=2),
-            nn.GELU()
-        )
-
-        self.neck2 = nn.Sequential(
-            nn.ConvTranspose2d(image_encoder_dim, image_encoder_dim // 4, kernel_size=2, stride=2),
-            LayerNorm2d(image_encoder_dim // 4),
-            nn.GELU(),
-            nn.ConvTranspose2d(image_encoder_dim//4, image_encoder_dim // 8, kernel_size=2, stride=2),
-            nn.GELU()
-        )
-
-        self.neck3 = nn.Sequential(
-            nn.ConvTranspose2d(image_encoder_dim, image_encoder_dim // 4, kernel_size=2, stride=2),
-            LayerNorm2d(image_encoder_dim // 4),
-            nn.GELU(),
-            nn.ConvTranspose2d(image_encoder_dim//4, image_encoder_dim // 8, kernel_size=2, stride=2),
-            LayerNorm2d(image_encoder_dim //8),
-            nn.GELU(),
-            nn.ConvTranspose2d(image_encoder_dim//8, image_encoder_dim // 16, kernel_size=2, stride=2),
-            nn.GELU()
-        )
-
-        self.neck4 = nn.Sequential(
-            nn.ConvTranspose2d(image_encoder_dim, image_encoder_dim // 4, kernel_size=2, stride=2),
-            LayerNorm2d(image_encoder_dim // 4),
-            nn.GELU(),
-            nn.ConvTranspose2d(image_encoder_dim//4, image_encoder_dim // 8, kernel_size=2, stride=2),
-            LayerNorm2d(image_encoder_dim //8),
-            nn.GELU(),
-            nn.ConvTranspose2d(image_encoder_dim//8, image_encoder_dim // 16, kernel_size=2, stride=2),
-            LayerNorm2d(image_encoder_dim //16),
-            nn.GELU(),
-            nn.ConvTranspose2d(image_encoder_dim//16, image_encoder_dim // 32, kernel_size=2, stride=2),
-            nn.GELU()
-        )
-
-        self.image_neck_list.extend([self.neck4, self.neck3, self.neck2, self.neck1]) # 越下层越小，dim 越大
-
+        for i in range(global_attn_layer):
+            self.image_neck_list.append(nn.Sequential(
+                                            nn.Conv2d(
+                                            embed_dim,
+                                            out_chans,
+                                            kernel_size=1,
+                                            bias=False,
+                                        ),
+                                        LayerNorm2d(out_chans),
+                                        nn.Conv2d(
+                                            out_chans,
+                                            out_chans,
+                                            kernel_size=3,
+                                            padding=1,
+                                            bias=False,
+                                        ),
+                                        LayerNorm2d(out_chans),
+                                        )
+                                    )
         
     def forward(self, image_embeddings):
         for i in range(len(self.image_neck_list)):
@@ -735,7 +680,7 @@ class Sam_task(nn.Module):
         
         # self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(image_encoder_dim)
+        self.Neck_list = Neck(image_encoder_dim, decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
 
