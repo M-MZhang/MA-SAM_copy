@@ -191,12 +191,16 @@ class ImageEncoderViT_task(nn.Module):
         self,
         ImageEncoderViT: nn.Module,
         init_layers,
+        FacTu: nn.Module,
+        FacTv: nn.Module,
         # task_adapter:nn.Module,
     ) -> None:
         super().__init__()
         self.ImageEncoderViT = ImageEncoderViT
         self.init_layers = init_layers
         self.img_size = self.ImageEncoderViT.img_size
+        self.FacTu = FacTu
+        self.FacTv = FacTv
 
     def forward(self, x: torch.Tensor, task_embed: torch.Tensor) -> torch.Tensor:
         x = self.ImageEncoderViT.patch_embed(x)
@@ -207,14 +211,11 @@ class ImageEncoderViT_task(nn.Module):
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
             if i in self.init_layers:
-                x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
+                x = self.ImageEncoderViT.blocks[i](x, task_embed[count],self.FacTu, self.FacTv )
                 count += 1
                 outputs.append(x)
             else:
-                x = self.ImageEncoderViT.blocks[i](x) 
-                # if i == 0:
-                #     outputs.append(x)
-            
+                x = self.ImageEncoderViT.blocks[i](x,self.FacTu, self.FacTv)
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
         
@@ -307,7 +308,7 @@ class Mask_adapter(nn.Module):
         return mask_task_embed
         
 
-class Block_task(nn.Module):
+class _Fact_Block_task(nn.Module):
     def __init__(
             self,
             Block: nn.Module,
@@ -315,7 +316,7 @@ class Block_task(nn.Module):
         super().__init__()
         self.Block = Block
     
-    def forward(self, x:torch.Tensor, task_embed) -> torch.Tensor:
+    def forward(self, x:torch.Tensor, task_embed, FacTu, FacTv) -> torch.Tensor:
         shortcut = x
         x = self.Block.norm1(x)
         # Window partition
@@ -323,7 +324,34 @@ class Block_task(nn.Module):
             H, W = x.shape[1], x.shape[2]
             x, pad_hw = window_partition(x, self.Block.window_size)  # [B * num_windows, window_size, window_size, C]
 
-        x = self.Block.attn(x, task_embed)
+        x = self.Block.attn(x, task_embed, FacTu, FacTv)
+        # Reverse window partition
+        if self.Block.window_size > 0:
+            x = window_unpartition(x, self.Block.window_size, pad_hw, (H, W))
+
+        x = shortcut + x
+
+        x = x + self.Block.mlp(self.Block.norm2(x))
+
+        return x
+
+class _Fact_Block(nn.Module):
+    def __init__(
+            self,
+            Block: nn.Module,
+    ):
+        super().__init__()
+        self.Block = Block
+    
+    def forward(self, x:torch.Tensor, FacTu, FacTv) -> torch.Tensor:
+        shortcut = x
+        x = self.Block.norm1(x)
+        # Window partition
+        if self.Block.window_size > 0:
+            H, W = x.shape[1], x.shape[2]
+            x, pad_hw = window_partition(x, self.Block.window_size)  # [B * num_windows, window_size, window_size, C]
+
+        x = self.Block.attn(x, FacTu, FacTv)
         # Reverse window partition
         if self.Block.window_size > 0:
             x = window_unpartition(x, self.Block.window_size, pad_hw, (H, W))
@@ -367,6 +395,132 @@ class Attention_task(nn.Module):
         x = self.Attention.proj(x)
 
         return x
+
+class _Fact_Attention(nn.Module):
+    def __init__(
+            self,
+            Attention: nn.Module,
+    ):
+        super().__init__()
+        self.Attention = Attention
+    
+    def forward(self, x: torch.Tensor, FacTu, FacTv) -> torch.Tensor:
+        B, H, W, _ = x.shape
+        # qkv with shape (3, B, nHead, H * W, C)
+        qkv = self.Attention.qkv(x, FacTu, FacTv).reshape(B, H * W, 3, self.Attention.num_heads, -1).permute(2, 0, 3, 1, 4)
+        # q, k, v with shape (B * nHead, H * W, C)
+        q, k, v = qkv.reshape(3, B * self.Attention.num_heads, H * W, -1).unbind(0)
+
+        attn = (q * self.Attention.scale) @ k.transpose(-2, -1)
+
+        if self.Attention.use_rel_pos:
+            attn = add_decomposed_rel_pos(attn, q, self.Attention.rel_pos_h, self.Attention.rel_pos_w, (H, W), (H, W))
+
+        attn = attn.softmax(dim=-1)
+        x = (attn @ v).view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        x = self.Attention.proj(x)
+
+        return x
+
+class _Fact_Attention_task(nn.Module):
+    def __init__(
+            self,
+            Attention: nn.Module,
+    ):
+        super().__init__()
+        self.Attention = Attention
+
+    def forward(self, x: torch.Tensor, FacTu, FacTv) -> torch.Tensor:
+        B, H, W, _ = x.shape
+        task_num, dim = task_embed.shape
+        # concate task_embed
+        x = x.reshape(B, H*W, -1)
+        task_embed = task_embed.expand(B, task_num, -1)
+        x = torch.concat([x, task_embed], dim=-2) #[B, H*W+1, -1]
+        # qkv with shape (3, B, nHead, H * W, C)
+        qkv = self.Attention.qkv(x, FacTu, FacTv).reshape(B, H * W+task_num, 3, self.Attention.num_heads, -1).permute(2, 0, 3, 1, 4)
+        # q, k, v with shape (B * nHead, H * W, C)
+        q, k, v = qkv.reshape(3, B * self.Attention.num_heads, H * W+task_num, -1).unbind(0)
+
+        attn = (q * self.Attention.scale) @ k.transpose(-2, -1)
+
+        if self.Attention.use_rel_pos:
+            attn = add_decomposed_rel_pos(attn[:, :-task_num, :-task_num], q[:, :-task_num, :], self.Attention.rel_pos_h, self.Attention.rel_pos_w, (H, W), (H, W))
+
+        attn = attn.softmax(dim=-1)
+        x = attn @ v
+        x = x[:, :-task_num, :]
+        x = x.view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        x = self.Attention.proj(x)
+
+        return x
+
+class _Fact_qkv(nn.Module):
+    """In Sam it is implemented as
+    self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+    B, N, C = x.shape
+    qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+    q, k, v = qkv.unbind(0)
+    """
+
+    def __init__(
+            self,
+            qkv: nn.Module,
+            q_FacTs: nn.Module,
+            v_FacTs: nn.Module,
+            s,
+    ):
+        super().__init__()
+        self.qkv = qkv
+        self.q_FacTs = q_FacTs
+        self.v_FacTs = v_FacTs
+        self.dim = qkv.in_features
+        self.w_identity = torch.eye(qkv.in_features)
+        self.dp_q = nn.Dropout(0.1)
+        self.dp_v = nn.Dropout(0.1)
+        self.s = s
+
+    def forward(self, x, FacTu, FacTv):
+        qkv = self.qkv(x)  # B,N,N,3*org_C
+        new_q = FacTv(self.dp_q(self.q_FacTs(FacTu(x))))  
+        new_v = FacTv(self.dp_v(self.v_FacTs(FacTu(x))))
+        qkv[:, :, :, : self.dim] += new_q*self.s
+        qkv[:, :, :, -self.dim:] += new_v*self.s
+        return qkv
+
+class _Fact_qkv_task(nn.Module):
+    """In Sam it is implemented as
+    self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+    B, N, C = x.shape
+    qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+    q, k, v = qkv.unbind(0)
+    """
+
+    def __init__(
+            self,
+            qkv: nn.Module,
+            q_FacTs: nn.Module,
+            v_FacTs: nn.Module,
+            s,
+    ):
+        super().__init__()
+        self.qkv = qkv
+        self.q_FacTs = q_FacTs
+        self.v_FacTs = v_FacTs
+        self.dim = qkv.in_features
+        self.w_identity = torch.eye(qkv.in_features)
+        self.dp_q = nn.Dropout(0.1)
+        self.dp_v = nn.Dropout(0.1)
+        self.s = s
+
+    def forward(self, x, FacTu, FacTv):
+        qkv = self.qkv(x)  # B,N,N,3*org_C
+        new_q = FacTv(self.dp_q(self.q_FacTs(FacTu(x))))  
+        new_v = FacTv(self.dp_v(self.v_FacTs(FacTu(x))))
+        qkv[:, :, : self.dim] += new_q*self.s
+        qkv[:, :, -self.dim:] += new_v*self.s
+        return qkv
+
 
 class _LoRA_qkv(nn.Module):
     """In Sam it is implemented as
@@ -627,7 +781,8 @@ class Sam_task(nn.Module):
         self,
         sam_model: Sam,
         r: int,
-        lora_layer = None,
+        fact_layer = None,
+        s=1,
     ) -> None:
         """
         SAM predicts object masks from an image and input prompts.
@@ -657,46 +812,44 @@ class Sam_task(nn.Module):
         
         self.task_specific_embed_list = nn.ParameterList()
 
-        # lora
-        if lora_layer:
-            self.lora_layer = lora_layer
+        # fact
+        if fact_layer:
+            self.fact_layer = fact_layer
         else:
-            self.lora_layer = list(
-                range(len(sam_model.image_encoder.blocks))
-            )
-        
-        self.w_As = []
-        self.w_Bs = []
+            self.fact_layer = list(
+                range(len(sam_model.image_encoder.blocks)))  
+        # create for storage, then we can init them or load weights
+        self.q_FacTs = []  # These are linear layers
+        self.v_FacTs = []
 
+        self.FacTu = nn.Linear(image_encoder_dim, r, bias=False)
+        self.FacTv = nn.Linear(r, image_encoder_dim, bias=False)
+        nn.init.zeros_(self.FacTv.weight)
+        
         for param in sam_model.image_encoder.parameters():
             param.requires_grad = False
 
 
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
-            if layer_i not in self.lora_layer:
+            if layer_i not in self.fact_layer:
                 continue
 
             w_qkv_linear = blk.attn.qkv
             self.dim = w_qkv_linear.in_features
-            w_a_linear_q = nn.Linear(self.dim, r, bias=False)
-            w_b_linear_q = nn.Linear(r, self.dim, bias=False)
-            w_a_linear_v = nn.Linear(self.dim, r, bias=False)
-            w_b_linear_v = nn.Linear(r, self.dim, bias=False)
-            self.w_As.append(w_a_linear_q)
-            self.w_Bs.append(w_b_linear_q)
-            self.w_As.append(w_a_linear_v)
-            self.w_Bs.append(w_b_linear_v)
+            q_FacTs = nn.Linear(r, r, bias=False)
+            v_FacTs = nn.Linear(r, r, bias=False)
+            self.q_FacTs.append(q_FacTs)
+            self.v_FacTs.append(v_FacTs)
 
             if layer_i in sam_model.image_encoder.global_attn_indexes:
-                blk.attn.qkv = _LoRA_qkv_global(
+                blk.attn.qkv = _Fact_qkv_task(
                     w_qkv_linear,
-                    w_a_linear_q,
-                    w_b_linear_q,
-                    w_a_linear_v,
-                    w_b_linear_v,
+                    q_FacTs,
+                    v_FacTs,
+                    s
                 )
-                blk.attn = Attention_task(blk.attn)
-                sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
+                blk.attn = _Fact_Attention_task(blk.attn)
+                sam_model.image_encoder.blocks[layer_i] = _Fact_Block_task(blk)
 
                 # task_specific_embed
                 # task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
@@ -706,21 +859,21 @@ class Sam_task(nn.Module):
                 self.task_specific_embed_list.append(task_specific_embed)
 
             else:
-                blk.attn.qkv = _LoRA_qkv(
+                blk.attn.qkv = _Fact_qkv(
                     w_qkv_linear,
-                    w_a_linear_q,
-                    w_b_linear_q,
-                    w_a_linear_v,
-                    w_b_linear_v,
+                    q_FacTs,
+                    v_FacTs,
+                    s
                 )
-                # sam_model.image_encoder[layer_i] = blk     
+                blk.attn = _Fact_Attention(blk.attn)
+                sam_model.image_encoder[layer_i] = _Fact_Block(blk)     
         
-        sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
+        sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes, self.FacTu, self.FacTv)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
         
         self.sam = sam_model
 
-        self.init_weights() 
+        # self.init_weights() 
 
     @property
     def device(self) -> Any:
@@ -795,17 +948,18 @@ class Sam_task(nn.Module):
         num_task = self.global_attn_num
         task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
 
-        # lora
-        num_layer = len(self.w_As)  # actually, it is half
-        a_tensors = {f"w_a_{i:03d}": self.w_As[i].weight for i in range(num_layer)}
-        b_tensors = {f"w_b_{i:03d}": self.w_Bs[i].weight for i in range(num_layer)}
+        # fact
+        num_layer = len(self.q_FacTs)  # actually, it is half
+        a_tensors = {f"q_FacTs_{i:03d}": self.q_FacTs[i].weight for i in range(num_layer)}
+        b_tensors = {f"v_FacTs_{i:03d}": self.v_FacTs[i].weight for i in range(num_layer)}
         
         task_adapter_tensors = {}
         neck_list_tensors = {}
         prompt_encoder_tensors = {}
-        # u_decoder_tensors = {}
         mask_decoder_tensors = {}
-        # mask_adapter_tensors = {}
+        
+        FacTu_tensors = {}
+        FacTv_tensors = {}
 
         
         if isinstance(self, torch.nn.DataParallel) or isinstance(self, torch.nn.parallel.DistributedDataParallel):
@@ -822,9 +976,13 @@ class Sam_task(nn.Module):
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key and 'sam' not in key:
                 mask_decoder_tensors[key] = value
+            if 'FacTu' in key:
+                FacTu_tensors[key] = value
+            if 'FacTv' in key:
+                FacTv_tensors[key] = value
         
 
-        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**a_tensors, **b_tensors, **FacTu_tensors, **FacTv_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -833,18 +991,28 @@ class Sam_task(nn.Module):
 
         state_dict = torch.load(filename)
 
-        for i, w_A_linear in enumerate(self.w_As):
-            saved_key = f"w_a_{i:03d}"
+        for i, q_FacTs in enumerate(self.q_FacTs):
+            saved_key = f"q_FacTs_{i:03d}"
             saved_tensor = state_dict[saved_key]
-            w_A_linear.weight = nn.Parameter(saved_tensor)
+            q_FacTs.weight = nn.Parameter(saved_tensor)
 
-        for i, w_B_linear in enumerate(self.w_Bs):
-            saved_key = f"w_b_{i:03d}"
+        for i, v_FacTs in enumerate(self.v_FacTs):
+            saved_key = f"v_FacTs_{i:03d}"
             saved_tensor = state_dict[saved_key]
-            w_B_linear.weight = nn.Parameter(saved_tensor)
+            v_FacTs.weight = nn.Parameter(saved_tensor)
 
         sam_dict = self.state_dict() #调整为针对self的字典
         sam_keys = sam_dict.keys()
+
+        FacTu_keys = [k for k in sam_keys if 'FacTu' in k]
+        FacTu_values = [state_dict[k] for k in FacTu_keys]
+        FacTu_new_state_dict = {k: v for k, v in zip(FacTu_keys, FacTu_values)}
+        sam_dict.update(FacTu_new_state_dict)
+
+        FacTv_keys = [k for k in sam_keys if 'FacTv' in k]
+        FacTv_values = [state_dict[k] for k in FacTv_keys]
+        FacTv_new_state_dict = {k: v for k, v in zip(FacTv_keys, FacTv_values)}
+        sam_dict.update(FacTv_new_state_dict)
 
         # load task_specific_embed
         for i, task_embed in enumerate(self.task_specific_embed_list):
@@ -865,13 +1033,13 @@ class Sam_task(nn.Module):
         sam_dict.update(neck_list_state_dict)
 
         # load prompt_encoder
-        prompt_encoder_keys = [k for k in sam_keys if 'u_decoder' in k]
+        prompt_encoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
         prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
         prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
         sam_dict.update(prompt_encoder_state_dict)
 
         # load mask_decoder
-        mask_decoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
+        mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k]
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
