@@ -675,7 +675,7 @@ class Sam_task(nn.Module):
                 self.task_specific_embed_list.append(task_specific_embed)
 
             else:
-                sam_model.image_encoder[layer_i] = blk     
+                sam_model.image_encoder.blocks[layer_i] = blk     
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
