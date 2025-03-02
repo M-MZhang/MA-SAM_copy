@@ -682,7 +682,7 @@ class Sam_task(nn.Module):
         
         self.sam = sam_model
 
-        self.init_weights() 
+        # self.init_weights() 
 
     @property
     def device(self) -> Any:
@@ -732,7 +732,7 @@ class Sam_task(nn.Module):
     
         return outputs
     
-    def init_weights(self):
+    # def init_weights(self):
         # task_adapter = self.task_adapter.neck_list
         # mask_adapter = self.task_adapter.mask_adapter_mlp_list
         # layers = len(task_adapter)
@@ -745,10 +745,10 @@ class Sam_task(nn.Module):
         #         nn.init.constant_(item.layers[-1].weight, 0)
         #         nn.init.constant_(item.layers[-1].weight, 0)
         
-        for w_A in self.w_As:
-            nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
-        for w_B in self.w_Bs:
-            nn.init.zeros_(w_B.weight)
+        # for w_A in self.w_As:
+        #     nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
+        # for w_B in self.w_Bs:
+        #     nn.init.zeros_(w_B.weight)
         
 
     def save_parameters(self, filename: str) ->None:
@@ -758,9 +758,9 @@ class Sam_task(nn.Module):
         task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
 
         # lora
-        num_layer = len(self.w_As)  # actually, it is half
-        a_tensors = {f"w_a_{i:03d}": self.w_As[i].weight for i in range(num_layer)}
-        b_tensors = {f"w_b_{i:03d}": self.w_Bs[i].weight for i in range(num_layer)}
+        # num_layer = len(self.w_As)  # actually, it is half
+        # a_tensors = {f"w_a_{i:03d}": self.w_As[i].weight for i in range(num_layer)}
+        # b_tensors = {f"w_b_{i:03d}": self.w_Bs[i].weight for i in range(num_layer)}
         
         task_adapter_tensors = {}
         neck_list_tensors = {}
@@ -786,7 +786,7 @@ class Sam_task(nn.Module):
                 mask_decoder_tensors[key] = value
         
 
-        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -795,15 +795,15 @@ class Sam_task(nn.Module):
 
         state_dict = torch.load(filename)
 
-        for i, w_A_linear in enumerate(self.w_As):
-            saved_key = f"w_a_{i:03d}"
-            saved_tensor = state_dict[saved_key]
-            w_A_linear.weight = nn.Parameter(saved_tensor)
+        # for i, w_A_linear in enumerate(self.w_As):
+        #     saved_key = f"w_a_{i:03d}"
+        #     saved_tensor = state_dict[saved_key]
+        #     w_A_linear.weight = nn.Parameter(saved_tensor)
 
-        for i, w_B_linear in enumerate(self.w_Bs):
-            saved_key = f"w_b_{i:03d}"
-            saved_tensor = state_dict[saved_key]
-            w_B_linear.weight = nn.Parameter(saved_tensor)
+        # for i, w_B_linear in enumerate(self.w_Bs):
+        #     saved_key = f"w_b_{i:03d}"
+        #     saved_tensor = state_dict[saved_key]
+        #     w_B_linear.weight = nn.Parameter(saved_tensor)
 
         sam_dict = self.state_dict() #调整为针对self的字典
         sam_keys = sam_dict.keys()
