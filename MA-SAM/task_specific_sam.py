@@ -637,6 +637,7 @@ class U_decoder(nn.Module):
             pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             for i in range(self.layer_num-1, -1, -1):
                 if i == self.layer_num-1:
+                    src = src + masks_list[i]
                     src = src.flatten(2).permute(0,2,1)
                 else:
                     src = src + masks_list[i].flatten(2).permute(0, 2, 1)
