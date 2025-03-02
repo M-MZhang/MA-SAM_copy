@@ -212,9 +212,7 @@ class ImageEncoderViT_task(nn.Module):
                 outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
-                # if i == 0:
-                #     outputs.append(x)
-            
+               
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
         
@@ -657,63 +655,27 @@ class Sam_task(nn.Module):
         
         self.task_specific_embed_list = nn.ParameterList()
 
-        # lora
-        if lora_layer:
-            self.lora_layer = lora_layer
-        else:
-            self.lora_layer = list(
-                range(len(sam_model.image_encoder.blocks))
-            )
-        
-        self.w_As = []
-        self.w_Bs = []
 
         for param in sam_model.image_encoder.parameters():
             param.requires_grad = False
 
 
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
-            if layer_i not in self.lora_layer:
-                continue
-
-            w_qkv_linear = blk.attn.qkv
-            self.dim = w_qkv_linear.in_features
-            w_a_linear_q = nn.Linear(self.dim, r, bias=False)
-            w_b_linear_q = nn.Linear(r, self.dim, bias=False)
-            w_a_linear_v = nn.Linear(self.dim, r, bias=False)
-            w_b_linear_v = nn.Linear(r, self.dim, bias=False)
-            self.w_As.append(w_a_linear_q)
-            self.w_Bs.append(w_b_linear_q)
-            self.w_As.append(w_a_linear_v)
-            self.w_Bs.append(w_b_linear_v)
+    
 
             if layer_i in sam_model.image_encoder.global_attn_indexes:
-                blk.attn.qkv = _LoRA_qkv_global(
-                    w_qkv_linear,
-                    w_a_linear_q,
-                    w_b_linear_q,
-                    w_a_linear_v,
-                    w_b_linear_v,
-                )
+            
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
                 # task_specific_embed
-                # task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
                 task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
 
             else:
-                blk.attn.qkv = _LoRA_qkv(
-                    w_qkv_linear,
-                    w_a_linear_q,
-                    w_b_linear_q,
-                    w_a_linear_v,
-                    w_b_linear_v,
-                )
-                # sam_model.image_encoder[layer_i] = blk     
+                sam_model.image_encoder[layer_i] = blk     
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
