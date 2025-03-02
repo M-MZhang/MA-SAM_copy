@@ -45,8 +45,8 @@ class MLP(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
             # x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-            x = F.leaky_relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x
@@ -241,11 +241,11 @@ class Task_adapter(nn.Module):
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
                 nn.Linear(decoder_dim, image_dim//4),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim//4, image_dim//4),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim//4, image_dim),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim, image_dim), #增加一项全连接层
                 ) 
             )
@@ -280,7 +280,7 @@ class Mask_adapter(nn.Module):
         for i in range(num_layers):
             neck = nn.Sequential(
                 nn.Linear(image_dim, image_dim//4),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim//4, decoder_dim)
             )
 
@@ -592,11 +592,10 @@ class U_decoder(nn.Module):
             ]
         )
         
-        
     
     def forward(self, src, mask_tokens):
         
-        for i in range(self.num_layer-1, -1, 0):
+        for i in range(self.num_layer-1, 0, -1):
             src[i-1] = self.image_fusion_list[i](torch.cat([src[i], src[i-1]], dim=1))
 
             raw_mask_token = torch.cat([mask_tokens[i],mask_tokens[i-1]], dim=-1)
@@ -776,7 +775,7 @@ class Sam_task(nn.Module):
             points=None, boxes=None, masks=None,
         ) #[batch, 256, 32, 32]
 
-        low_res_masks, iou_predictions = self.mask_decoder(
+        low_res_masks = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.sam.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
@@ -792,7 +791,7 @@ class Sam_task(nn.Module):
         )
         outputs = {
             'masks': masks,
-            'iou_predictions': iou_predictions,
+            'iou_predictions': None,
             'low_res_logits': low_res_masks
         }
     
