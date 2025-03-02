@@ -676,36 +676,30 @@ class Sam_task(nn.Module):
             if layer_i not in self.lora_layer:
                 continue
 
-            w_qkv_linear = blk.attn.qkv
-            self.dim = w_qkv_linear.in_features
-            w_a_linear_q = nn.Linear(self.dim, r, bias=False)
-            w_b_linear_q = nn.Linear(r, self.dim, bias=False)
-            w_a_linear_v = nn.Linear(self.dim, r, bias=False)
-            w_b_linear_v = nn.Linear(r, self.dim, bias=False)
-            self.w_As.append(w_a_linear_q)
-            self.w_Bs.append(w_b_linear_q)
-            self.w_As.append(w_a_linear_v)
-            self.w_Bs.append(w_b_linear_v)
 
             if layer_i in sam_model.image_encoder.global_attn_indexes:
-                # blk.attn.qkv = _LoRA_qkv_global(
-                #     w_qkv_linear,
-                #     w_a_linear_q,
-                #     w_b_linear_q,
-                #     w_a_linear_v,
-                #     w_b_linear_v,
-                # )
+        
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
                 # task_specific_embed
-                # task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
                 task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
 
             else:
+                w_qkv_linear = blk.attn.qkv
+                self.dim = w_qkv_linear.in_features
+                w_a_linear_q = nn.Linear(self.dim, r, bias=False)
+                w_b_linear_q = nn.Linear(r, self.dim, bias=False)
+                w_a_linear_v = nn.Linear(self.dim, r, bias=False)
+                w_b_linear_v = nn.Linear(r, self.dim, bias=False)
+                self.w_As.append(w_a_linear_q)
+                self.w_Bs.append(w_b_linear_q)
+                self.w_As.append(w_a_linear_v)
+                self.w_Bs.append(w_b_linear_v)
+
                 blk.attn.qkv = _LoRA_qkv(
                     w_qkv_linear,
                     w_a_linear_q,
