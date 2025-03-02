@@ -487,7 +487,7 @@ class MaskDecoder_task(nn.Module):
 
             mask_downscaling = nn.Sequential(
                 nn.Softmax(dim=1),
-                nn.Conv2d(1, mask_in_chans // 4, kernel_size=2, stride=2),
+                nn.Conv2d(self.num_mask_tokens, mask_in_chans // 4, kernel_size=2, stride=2),
                 LayerNorm2d(mask_in_chans // 4),
                 nn.GELU(),
                 nn.Conv2d(mask_in_chans // 4, mask_in_chans, kernel_size=2, stride=2),
