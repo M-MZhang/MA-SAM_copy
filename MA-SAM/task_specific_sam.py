@@ -454,7 +454,7 @@ class MaskDecoder_task(nn.Module):
         self.output_hypernetworks_mlps_list = nn.ModuleList()
         self.mask_downscaling_list = nn.ModuleList()
       
-        for i in range(num_layer):
+        for i in range(num_layer-1):
             mask_transform = TwoWayTransformer(
                 depth=1,
                 embedding_dim=transformer_dim,
@@ -510,7 +510,7 @@ class MaskDecoder_task(nn.Module):
     ):  
         
         masks_list = []
-        for i in range(self.num_layer):
+        for i in range(self.num_layer-1):
             masks = self.predict_masks(
                 image_embeddings=image_embeddings,
                 image_pe=image_pe,
@@ -637,7 +637,7 @@ class U_decoder(nn.Module):
             pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             for i in range(self.layer_num-1, -1, -1):
                 if i == self.layer_num-1:
-                    src = src + masks_list[i]
+                    # src = src + masks_list[i]
                     src = src.flatten(2).permute(0,2,1)
                 else:
                     src = src + masks_list[i].flatten(2).permute(0, 2, 1)
