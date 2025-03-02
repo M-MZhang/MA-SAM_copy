@@ -46,7 +46,7 @@ class MLP(nn.Module):
     def forward(self, x):
         for i, layer in enumerate(self.layers):
             # x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-            x = F.leaky_relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = nn.GELU(layer(x)) if i < self.num_layers - 1 else layer(x)
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x
@@ -239,11 +239,11 @@ class Task_adapter(nn.Module):
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
                 nn.Linear(decoder_dim, image_dim//4),
-                nn.LeakyReLU(),
+                nn.GELU(),
                 nn.Linear(image_dim//4, image_dim//4),
-                nn.LeakyReLU(),
+                nn.GELU(),
                 nn.Linear(image_dim//4, image_dim),
-                nn.LeakyReLU(),
+                nn.GELU(),
                 nn.Linear(image_dim, image_dim), #增加一项全连接层
                 ) 
             )
@@ -286,9 +286,9 @@ class Mask_adapter(nn.Module):
             
             self.neck_list.append(nn.Sequential(
                 nn.Linear(image_dim, image_dim//4),
-                nn.LeakyReLU(),
+                nn.GELU(),
                 nn.Linear(image_dim//4, image_dim//4),
-                nn.LeakyReLU(),
+                nn.GELU(),
                 nn.Linear(image_dim//4, decoder_dim),
             ))
     
