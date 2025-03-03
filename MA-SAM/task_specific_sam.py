@@ -60,7 +60,7 @@ class Decoder_block(nn.Module):
         mlp_dim: int = 2048,
         activation: Type[nn.Module] = nn.ReLU,
         attention_downsample_rate: int = 2,
-        skip_first_layer_pe: bool = False,
+        first_layer: bool = False,
     ) -> None:
         
         super().__init__()
@@ -73,6 +73,40 @@ class Decoder_block(nn.Module):
         self.cross_attn_token_to_image = Attention(
             embedding_dim, num_heads, downsample_rate = attention_downsample_rate
         )
+        self.norm3 = nn.LayerNorm(embedding_dim)
+
+        self.mlp = MLPBlock(embedding_dim, mlp_dim, activation)
+        self.norm4 = nn.LayerNorm(embedding_dim)
+
+        self.first_layer = first_layer
+        # self.cross_attn_image_to_token = Attention (感觉并不需要一个双向的交流)
+    
+    def forward(self, tokens, src1, src2, position):
+        # token self_attn
+        tokens_self_attn = self.token_self_attn(q=tokens, k=tokens, v=tokens)
+        tokens = tokens + tokens_self_attn
+        tokens = self.norm1(tokens)
+
+        # image cross fusion
+        if not self.first_layer:
+            image_cross_attn = self.image_cross_attn(q=src1, k=src2, v=src2)
+            src1 = src1+image_cross_attn
+            src1 = self.norm2(src1)
+        
+        # cross attn, tokens attending to image embedding
+        k = src1 + position
+        attn_out = self.cross_attn_token_to_image(q=tokens, k=k, v=src1)
+        tokens = tokens + attn_out
+        tokens = self.norm3(tokens)
+
+        # MLP block
+        mlp_out = self.mlp(tokens)
+        tokens = tokens+mlp_out
+        tokens = self.norm4(tokens)
+
+        return tokens, src1
+
+
 
 # From https://github.com/facebookresearch/detectron2/blob/main/detectron2/layers/batch_norm.py # noqa
 # Itself from https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119  # noqa
@@ -494,14 +528,21 @@ class MaskDecoder_task(nn.Module):
         )
     
         for i in range(num_layer):
-            n_transformer = TwoWayTransformer(
-                depth=2,
+            # n_transformer = TwoWayTransformer(
+            #     depth=2,
+            #     embedding_dim=transformer_dim,
+            #     mlp_dim=2048,
+            #     num_heads=8,
+            # )
+
+            decoder_block = Decoder_block(
                 embedding_dim=transformer_dim,
-                mlp_dim=2048,
                 num_heads=8,
+                mlp_dim=2048,
+                first_layer=(i==num_layer-1)
             )
             
-            self.transformer_list.append(n_transformer)
+            self.transformer_list.append(decoder_block)
         
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
@@ -545,26 +586,27 @@ class MaskDecoder_task(nn.Module):
             if i == self.num_layer-1:
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
                 hs = torch.cat((output_tokens, sparse_prompt_embeddings, mask_tokens), dim=1)
-                src = torch.repeat_interleave(image_embeddings[i], hs.shape[0], dim=0)
-                src = src + dense_prompt_embeddings
-                b, c, h, w = src.shape
-                src = src.flatten(2).permute(0,2,1)
+                src1 = torch.repeat_interleave(image_embeddings[i], hs.shape[0], dim=0)
+                src1 = src1 + dense_prompt_embeddings
+                b, c, h, w = src1.shape
+                src1 = src1.flatten(2).permute(0,2,1)
+                src2 = None
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                src2 = image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
-            hs, src = self.transformer_list[i](src, pos_src, hs)
+            hs, src1 = self.transformer_list[i](hs, src1, src2, pos_src)
         
         
         iou_token_out = hs[:, 0, :]
         mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
-        src = src.transpose(1, 2).view(b, c, h, w)
+        src1 = src1.transpose(1, 2).view(b, c, h, w)
         # print(src.shape)
-        upscaled_embedding = self.output_upscaling(src) #[b, embed_dim//32, pos_dim*16]
+        upscaled_embedding = self.output_upscaling(src1) #[b, embed_dim//32, pos_dim*16]
         # print(upscaled_embedding.shape)
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
