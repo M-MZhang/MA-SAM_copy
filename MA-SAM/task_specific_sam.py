@@ -7,7 +7,7 @@ import math
 
 from typing import Any, Dict, List, Tuple
 
-from segment_anything.modeling import Sam, TwoWayTransformer
+from segment_anything.modeling import Sam, TwoWayTransformer, Attention
 
 
 class MLPBlock(nn.Module):
@@ -51,6 +51,28 @@ class MLP(nn.Module):
             x = F.sigmoid(x)
         return x
 
+
+class Decoder_block(nn.Module):
+    def __init__(
+        self,
+        embedding_dim: int,
+        num_heads: int,
+        mlp_dim: int = 2048,
+        activation: Type[nn.Module] = nn.ReLU,
+        attention_downsample_rate: int = 2,
+        skip_first_layer_pe: bool = False,
+    ) -> None:
+        
+        super().__init__()
+        self.token_self_attn = Attention(embedding_dim, num_heads)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+
+        self.image_cross_attn = Attention(embedding_dim, num_heads)
+        self.norm2 = nn.LayerNorm(embedding_dim)
+
+        self.cross_attn_token_to_image = Attention(
+            embedding_dim, num_heads, downsample_rate = attention_downsample_rate
+        )
 
 # From https://github.com/facebookresearch/detectron2/blob/main/detectron2/layers/batch_norm.py # noqa
 # Itself from https://github.com/facebookresearch/ConvNeXt/blob/d1fa8f6fef0a165b27399986cc2bdacc92777e40/models/convnext.py#L119  # noqa
