@@ -8,6 +8,7 @@ import math
 from typing import Any, Dict, List, Tuple
 
 from segment_anything.modeling import Sam, TwoWayTransformer
+import copy
 
 
 class MLPBlock(nn.Module):
@@ -452,17 +453,11 @@ class MaskDecoder_task(nn.Module):
         self.mask_tokens_list = nn.ParameterList()
         self.output_upscaling_list = nn.ModuleList()
         self.output_hypernetworks_mlps_list = nn.ModuleList()
-        self.mask_downscaling_list = nn.ModuleList()
+      
       
         for i in range(num_layer):
-            mask_transform = TwoWayTransformer(
-                depth=1,
-                embedding_dim=transformer_dim,
-                mlp_dim=2048,
-                num_heads=8,
-            )
-
-            self.mask_transformer_list.append(mask_transform)
+    
+            self.mask_transformer_list.append(copy.deepcopy(MaskDecoder.transformer))
 
             mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
             self.mask_tokens_list.append(mask_tokens)
@@ -485,7 +480,7 @@ class MaskDecoder_task(nn.Module):
 
             self.output_hypernetworks_mlps_list.append(output_hypernetworks_mlps)
 
-            mask_downscaling = nn.Sequential(
+        self.mask_downscaling = nn.Sequential(
                 nn.Conv2d(self.num_mask_tokens, mask_in_chans // 4, kernel_size=2, stride=2),
                 LayerNorm2d(mask_in_chans // 4),
                 nn.GELU(),
@@ -494,7 +489,7 @@ class MaskDecoder_task(nn.Module):
                 nn.GELU(),
                 nn.Conv2d(mask_in_chans, transformer_dim, kernel_size=1),
             )  # downsample to 1/4
-            self.mask_downscaling_list.append(mask_downscaling)
+            
 
         self.u_fusion = U_decoder(transformer_dim, num_layer, self.num_mask_tokens) # less than transformer module
            
@@ -509,7 +504,7 @@ class MaskDecoder_task(nn.Module):
             task_specific_embed: torch.Tensor,
     ):  
         
-        masks_list = []
+        masks_list = [] #[num_layer, b, num_tokens, 256, 256]
         for i in range(self.num_layer):
             masks = self.predict_masks(
                 image_embeddings=image_embeddings,
@@ -521,13 +516,15 @@ class MaskDecoder_task(nn.Module):
             )
             masks_list.append(masks)
         
-        down_scale_masks = []
-        for layer, masks in zip(self.mask_downscaling_list, masks_list):
-            down_scale_masks.append(layer(masks)) 
+        masks_list = torch.stack(masks_list).permute(1, 2, 0, 3, 4)
+        down_scale_masks = self.mask_downscaling(torch.mean(masks_list,dim=2).squeeze()) 
+        # for layer, masks in zip(self.mask_downscaling_list, masks_list):
+        #     down_scale_masks.append(layer(masks)) 
         
         masks = self.u_fusion(image_embeddings,
                               image_pe, 
                               sparse_prompt_embeddings,
+                              dense_prompt_embeddings,
                               down_scale_masks)
                 
         return masks
@@ -580,24 +577,16 @@ class U_decoder(nn.Module):
             transformer_dim:int,
             global_attn_num : int,
             num_mask_tokens:int,
+            Maskdecoder:nn.Module,
     ):
         super().__init__()
 
         self.layer_num = global_attn_num
-        self.decoder_transform_list = nn.ModuleList()
         self.mask_tokens = nn.Embedding(num_mask_tokens, transformer_dim)
         self.num_mask_tokens = num_mask_tokens
 
-        for i in range(self.layer_num):
-            decoder_transform = TwoWayTransformer(
-                depth=1,
-                embedding_dim=transformer_dim,
-                mlp_dim=2048,
-                num_heads=8,
-            )
+        self.decoder_transform = copy.deepcopy(Maskdecoder.transformer)
 
-            self.decoder_transform_list.append(decoder_transform)
-       
         self.final_output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
             LayerNorm2d(transformer_dim // 4),
@@ -624,25 +613,21 @@ class U_decoder(nn.Module):
                 image_embeddings: torch.Tensor,
                 image_pe: torch.Tensor,
                 sparse_prompt_embeddings: torch.Tensor,
+                dense_prompt_embeddings: torch.Tensor,
                 masks_list: list):
         
         for i in range(self.layer_num):
             output_tokens = self.mask_tokens.weight
             output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
-        
-            # Expand per-image data in batch direction to be per-mask
-            hs = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1) 
-            src = torch.repeat_interleave(image_embeddings[-1], hs.shape[0], dim=0)
-            b, c, h, w = src.shape
-            pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
-            for i in range(self.layer_num-1, -1, -1):
-                if i == self.layer_num-1:
-                    src = src + masks_list[i]
-                    src = src.flatten(2).permute(0,2,1)
-                else:
-                    src = src + masks_list[i].flatten(2).permute(0, 2, 1)
-                hs, src = self.decoder_transform_list[i](src, pos_src, hs)
+            tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
             
+            # Expand per-image data in batch direction to be per-mask
+           
+            src = torch.repeat_interleave(image_embeddings[-1], tokens.shape[0], dim=0)
+            src = src + dense_prompt_embeddings
+            b, c, h, w = src.shape
+            pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
+            hs, src = self.decoder_transform(src, pos_src, tokens)
             
             mask_tokens_out = hs[:, 0 : (0 + self.num_mask_tokens), :]
             # Upscale mask embeddings and predict masks using the mask tokens
