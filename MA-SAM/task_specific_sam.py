@@ -86,6 +86,9 @@ class Decoder_block(nn.Module):
 
     
     def forward(self, tokens, src1, src2, position):
+        
+        position = position.flatten(2).permute(0, 2, 1)
+
         # token self_attn
         tokens_self_attn = self.token_self_attn(q=tokens, k=tokens, v=tokens)
         tokens_ = tokens + tokens_self_attn
