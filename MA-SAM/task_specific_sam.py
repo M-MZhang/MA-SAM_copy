@@ -8,6 +8,8 @@ import math
 from typing import Any, Dict, List, Tuple
 
 from segment_anything.modeling import Sam, TwoWayTransformer
+import copy
+
 
 
 class MLPBlock(nn.Module):
@@ -250,7 +252,6 @@ class Task_adapter(nn.Module):
                 ) 
             )
         
-    
     def forward(self, task_embed: torch.Tensor):
         image_task_embed = []
         mask_task_embed = []
@@ -472,14 +473,14 @@ class MaskDecoder_task(nn.Module):
         )
     
         for i in range(num_layer):
-            n_transformer = TwoWayTransformer(
-                depth=2,
-                embedding_dim=transformer_dim,
-                mlp_dim=2048,
-                num_heads=8,
-            )
+            # n_transformer = TwoWayTransformer(
+            #     depth=2,
+            #     embedding_dim=transformer_dim,
+            #     mlp_dim=2048,
+            #     num_heads=8,
+            # )
             
-            self.transformer_list.append(n_transformer)
+            self.transformer_list.append(copy.deepcopy(MaskDecoder.transformer))
         
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
@@ -529,7 +530,7 @@ class MaskDecoder_task(nn.Module):
                 src = src.flatten(2).permute(0,2,1)
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                src = torch.cat([src[:,:h*w,:], image_embeddings[i].flatten(2).permute(0, 2, 1)], dim=1)  # concat the image_embeddings
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
