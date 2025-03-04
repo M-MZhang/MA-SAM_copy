@@ -483,7 +483,7 @@ class MaskDecoder_task(nn.Module):
         self.mask_fusion = nn.Sequential(
             LayerNorm2d(self.num_layer),  # 增加一个正则化的过程
             nn.Conv2d(self.num_layer, 1, kernel_size=1, bias=False)
-            )
+            ) # 这里相较于训练时，多加了一个正则化，希望先正则化，再fusion
 
         self.mask_downscaling = nn.Sequential(
                 nn.Conv2d(self.num_mask_tokens, mask_in_chans // 4, kernel_size=2, stride=2),
