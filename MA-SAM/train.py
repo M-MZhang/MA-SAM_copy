@@ -18,11 +18,11 @@ import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/RawData/Training', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/Vanille_me_v6.7')
+parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/Vanille_me_v7.5')
 parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/RawData/Training')
 parser.add_argument('--num_classes', type=int, default=12, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
-parser.add_argument('--n_gpu', type=int, default=4, help='total gpu')
+parser.add_argument('--n_gpu', type=int, default=5, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0012, help='segmentation network learning rate')
 
 parser.add_argument('--max_epochs', type=int,default=400, help='maximum epoch number to train')
