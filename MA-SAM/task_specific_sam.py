@@ -532,9 +532,10 @@ class MaskDecoder_task(nn.Module):
                 src = src + dense_prompt_embeddings
                 b, c, h, w = src.shape
                 src = src.flatten(2).permute(0,2,1)
+                src0 = src
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) + src0 # use other image_embedding as adapter
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
@@ -873,13 +874,13 @@ class Sam_task(nn.Module):
         sam_dict.update(neck_list_state_dict)
 
         # load prompt_encoder
-        prompt_encoder_keys = [k for k in sam_keys if 'u_decoder' in k]
+        prompt_encoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
         prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
         prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
         sam_dict.update(prompt_encoder_state_dict)
 
         # load mask_decoder
-        mask_decoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
+        mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k]
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
