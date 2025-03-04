@@ -67,44 +67,52 @@ class Decoder_block(nn.Module):
         self.token_self_attn = Attention(embedding_dim, num_heads)
         self.norm1 = nn.LayerNorm(embedding_dim)
 
-        self.image_cross_attn = Attention(embedding_dim, num_heads)
+        self.cross_attn_token_to_image2 = Attention(
+            embedding_dim, num_heads, attention_downsample_rate
+        )
         self.norm2 = nn.LayerNorm(embedding_dim)
 
-        self.cross_attn_token_to_image = Attention(
-            embedding_dim, num_heads, downsample_rate = attention_downsample_rate
-        )
+        self.mlp = MLPBlock(embedding_dim, mlp_dim, activation)
         self.norm3 = nn.LayerNorm(embedding_dim)
 
-        self.mlp = MLPBlock(embedding_dim, mlp_dim, activation)
+        self.cross_attn_image1_to_token = Attention(
+            embedding_dim, num_heads, attention_downsample_rate
+        )
         self.norm4 = nn.LayerNorm(embedding_dim)
 
+        # 需要一个image1 的self_attn嘛？
+        
         self.first_layer = first_layer
-        # self.cross_attn_image_to_token = Attention (感觉并不需要一个双向的交流)
+
     
     def forward(self, tokens, src1, src2, position):
         # token self_attn
         tokens_self_attn = self.token_self_attn(q=tokens, k=tokens, v=tokens)
-        tokens = tokens + tokens_self_attn
-        tokens = self.norm1(tokens)
+        tokens_ = tokens + tokens_self_attn
+        tokens_ = self.norm1(tokens_)
 
-        # image cross fusion
-        if not self.first_layer:
-            image_cross_attn = self.image_cross_attn(q=src1, k=src2, v=src2)
-            src1 = src1+image_cross_attn
-            src1 = self.norm2(src1)
         
-        # cross attn, tokens attending to image embedding
-        k = src1 + position
-        attn_out = self.cross_attn_token_to_image(q=tokens, k=k, v=src1)
-        tokens = tokens + attn_out
-        tokens = self.norm3(tokens)
+        # cross attn, tokens attending to image2 embedding
+        q = tokens_ + tokens
+        k = src2 + position
+        attn_out = self.cross_attn_token_to_image2(q=q, k=k, v=src2)
+        tokens_ = tokens_ + attn_out
+        tokens_ = self.norm2(tokens_)
 
         # MLP block
-        mlp_out = self.mlp(tokens)
-        tokens = tokens+mlp_out
-        tokens = self.norm4(tokens)
+        mlp_out = self.mlp(tokens_)
+        tokens_ = tokens_+mlp_out
+        tokens_ = self.norm3(tokens_)
+        
+        # cross attn, image1 attending to tokens
+        q = src1 + position
+        k = tokens_ + tokens
+        attn_out = self.cross_attn_image1_to_token(q=q, k=k, v=tokens_)
+        src1 = src1 + attn_out
+        src1 = self.norm4(src1)
 
-        return tokens, src1
+
+        return tokens_, src1
 
 
 
@@ -544,6 +552,12 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(decoder_block)
         
+        self.final_attn_token_to_image = Attention(
+            transformer_dim, num_heads=8, downsample_rate=2
+        )
+        self.norm_final_attn = nn.LayerNorm(transformer_dim)
+
+        
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
     
@@ -592,14 +606,18 @@ class MaskDecoder_task(nn.Module):
                 src1 = src1.flatten(2).permute(0,2,1)
                 src2 = None
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
+              
             else:
                 src2 = image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
-             
+
             hs, src1 = self.transformer_list[i](hs, src1, src2, pos_src)
         
-        
+        attn_out = self.final_attn_token_to_image(q=hs, k=src1, v=src1)
+        hs = self.norm_final_attn(hs + attn_out)
+
+     
         iou_token_out = hs[:, 0, :]
         mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
 
