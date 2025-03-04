@@ -484,7 +484,7 @@ class MaskDecoder_task(nn.Module):
             self.transformer_list.append(n_transformer)
             # 增加cross 的模块
             if i>0:
-                self.cross_attn_list.append(Attention(transformer_dim,8,2))
+                self.cross_attn_list.append(Attention(transformer_dim,num_heads=8,downsample_rate=2))
                 self.cross_norm_list.append(nn.LayerNorm(transformer_dim))
         
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
