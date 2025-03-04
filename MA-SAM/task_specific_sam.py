@@ -7,7 +7,7 @@ import math
 
 from typing import Any, Dict, List, Tuple
 
-from segment_anything.modeling import Sam, TwoWayTransformer
+from segment_anything.modeling import Sam, TwoWayTransformer,Attention
 
 
 class MLPBlock(nn.Module):
@@ -470,7 +470,9 @@ class MaskDecoder_task(nn.Module):
                 for i in range(self.num_mask_tokens)
             ]
         )
-    
+
+        self.cross_attn_list = nn.ModuleList()
+        self.cross_norm_list = nn.ModuleList()
         for i in range(num_layer):
             n_transformer = TwoWayTransformer(
                 depth=2,
@@ -480,8 +482,18 @@ class MaskDecoder_task(nn.Module):
             )
             
             self.transformer_list.append(n_transformer)
+            # 增加cross 的模块
+            if i>0:
+                self.cross_attn_list.append(Attention(transformer_dim,8,2))
+                self.cross_norm_list.append(nn.LayerNorm(transformer_dim))
         
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
+
+        # 将最后一个token_to_image 提出来
+        self.final_attn_token_to_image = Attention(
+            transformer_dim, 8, downsample_rate=2
+        )
+        self.norm_final_attn = nn.LayerNorm(transformer_dim)
            
     
     def forward(
@@ -529,11 +541,20 @@ class MaskDecoder_task(nn.Module):
                 src = src.flatten(2).permute(0,2,1)
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                # src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                key = image_embeddings[i].flatten(2).permute(0,2,1)
+                cross_attn_out = self.cross_attn_list[i](q=src, k=key, v=key)
+                src = self.cross_norm_list[i](src+cross_attn_out)
+
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
+        
+        # 最后的 token to image
+        attn_out = self.final_attn_token_to_image(q=hs, k=src, v=src)
+        hs = hs+attn_out
+        hs = self.norm_final_attn(hs)
         
         
         iou_token_out = hs[:, 0, :]
