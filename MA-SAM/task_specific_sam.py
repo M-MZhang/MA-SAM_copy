@@ -482,8 +482,8 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(copy.deepcopy(MaskDecoder.transformer))
         
-        self.image_norm = nn.LayerNorm(transformer_dim)
-        self.image_fusion = Attention(transformer_dim, num_heads=8, downsample_rate=2)
+        # self.image_norm = nn.LayerNorm(transformer_dim)
+        # self.image_fusion = Attention(transformer_dim, num_heads=8, downsample_rate=2)
         
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
@@ -533,9 +533,9 @@ class MaskDecoder_task(nn.Module):
                 src = src.flatten(2).permute(0,2,1)
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                q = src + image_embeddings[i].flatten(2).permute(0, 2, 1)
-                attn_out = self.image_fusion(q=q, k=q, v=q) # use other image_embedding as adapter
-                src = self.image_norm(src+attn_out)
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # 这里刚刚弄错了， 白跑了
+                # attn_out = self.image_fusion(q=q, k=q, v=q) # use other image_embedding as adapter
+                # src = self.image_norm(src+attn_out)
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
