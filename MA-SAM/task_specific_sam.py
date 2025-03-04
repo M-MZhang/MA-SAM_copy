@@ -7,7 +7,7 @@ import math
 
 from typing import Any, Dict, List, Tuple
 
-from segment_anything.modeling import Sam, TwoWayTransformer
+from segment_anything.modeling import Sam, TwoWayTransformer, Attention
 
 
 class MLPBlock(nn.Module):
@@ -481,6 +481,11 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(n_transformer)
         
+        self.final_attn_token_to_image = Attention(
+            transformer_dim, num_heads=8, downsample_rate=2
+        )
+        self.norm_final_attn = nn.LayerNorm(transformer_dim)
+        
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
     
@@ -534,6 +539,9 @@ class MaskDecoder_task(nn.Module):
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
+        
+        attn_out = self.final_attn_token_to_image(q=hs, k=src, v=src)
+        hs = self.norm_final_attn(hs+attn_out)
         
         
         iou_token_out = hs[:, 0, :]

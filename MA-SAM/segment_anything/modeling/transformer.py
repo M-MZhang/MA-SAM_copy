@@ -54,10 +54,10 @@ class TwoWayTransformer(nn.Module):
                 )
             )
 
-        self.final_attn_token_to_image = Attention(
-            embedding_dim, num_heads, downsample_rate=attention_downsample_rate
-        )
-        self.norm_final_attn = nn.LayerNorm(embedding_dim)
+        # self.final_attn_token_to_image = Attention(
+        #     embedding_dim, num_heads, downsample_rate=attention_downsample_rate
+        # )
+        # self.norm_final_attn = nn.LayerNorm(embedding_dim)
 
     def forward(
         self,
@@ -97,11 +97,11 @@ class TwoWayTransformer(nn.Module):
             )
 
         # Apply the final attenion layer from the points to the image
-        q = queries + point_embedding
-        k = keys + image_pe
-        attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
-        queries = queries + attn_out
-        queries = self.norm_final_attn(queries)
+        # q = queries + point_embedding
+        # k = keys + image_pe
+        # attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
+        # queries = queries + attn_out
+        # queries = self.norm_final_attn(queries)
 
         return queries, keys
 
