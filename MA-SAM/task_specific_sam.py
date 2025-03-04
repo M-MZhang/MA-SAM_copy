@@ -480,6 +480,11 @@ class MaskDecoder_task(nn.Module):
 
             self.output_hypernetworks_mlps_list.append(output_hypernetworks_mlps)
 
+        self.mask_fusion = nn.Sequential(
+            LayerNorm2d(self.num_layer),  # 增加一个正则化的过程
+            nn.Conv2d(self.num_layer, 1, kernel_size=1, bias=False)
+            )
+
         self.mask_downscaling = nn.Sequential(
                 nn.Conv2d(self.num_mask_tokens, mask_in_chans // 4, kernel_size=2, stride=2),
                 LayerNorm2d(mask_in_chans // 4),
@@ -491,7 +496,7 @@ class MaskDecoder_task(nn.Module):
             )  # downsample to 1/4
             
 
-        self.u_fusion = U_decoder(transformer_dim, num_layer, self.num_mask_tokens) # less than transformer module
+        self.u_fusion = U_decoder(transformer_dim, num_layer, self.num_mask_tokens, MaskDecoder) # less than transformer module
            
     
     def forward(
@@ -517,7 +522,11 @@ class MaskDecoder_task(nn.Module):
             masks_list.append(masks)
         
         masks_list = torch.stack(masks_list).permute(1, 2, 0, 3, 4)
-        down_scale_masks = self.mask_downscaling(torch.mean(masks_list,dim=2).squeeze()) 
+        b, num_token, num_layer, h, w = masks_list.shape
+        # down_scale_masks = self.mask_downscaling(torch.mean(masks_list,dim=2).squeeze()) 
+        down_scale_masks =self.mask_fusion(masks_list.view(b*num_token, num_layer, h, w)).squeeze()
+        down_scale_masks = down_scale_masks.view(b, num_token, h, w)
+        down_scale_masks = self.mask_downscaling(down_scale_masks)
         # for layer, masks in zip(self.mask_downscaling_list, masks_list):
         #     down_scale_masks.append(layer(masks)) 
         
@@ -624,9 +633,11 @@ class U_decoder(nn.Module):
             # Expand per-image data in batch direction to be per-mask
            
             src = torch.repeat_interleave(image_embeddings[-1], tokens.shape[0], dim=0)
-            src = src + dense_prompt_embeddings
+            src = src + masks_list # 加上模糊的mask_prompt
             b, c, h, w = src.shape
+            src = src.flatten(2).permute(0,2,1)
             pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
+
             hs, src = self.decoder_transform(src, pos_src, tokens)
             
             mask_tokens_out = hs[:, 0 : (0 + self.num_mask_tokens), :]
@@ -873,8 +884,8 @@ class Sam_task(nn.Module):
         for key, value in self_state_dict.items():
             if 'Neck_list' in key:
                 neck_list_tensors[key] = value
-            if 'prompt_encoder' in key:
-                prompt_encoder_tensors[key] = value
+            # if 'prompt_encoder' in key:
+            #     prompt_encoder_tensors[key] = value
             if 'task_adapter' in key:
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key and 'sam' not in key:
@@ -921,14 +932,14 @@ class Sam_task(nn.Module):
         neck_list_state_dict = {k:v for k, v in zip(neck_list_keys, neck_list_values)}
         sam_dict.update(neck_list_state_dict)
 
-        # load prompt_encoder
-        prompt_encoder_keys = [k for k in sam_keys if 'u_decoder' in k]
-        prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
-        prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
-        sam_dict.update(prompt_encoder_state_dict)
+        # # load prompt_encoder
+        # prompt_encoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
+        # prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
+        # prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
+        # sam_dict.update(prompt_encoder_state_dict)
 
         # load mask_decoder
-        mask_decoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
+        mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k]
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
