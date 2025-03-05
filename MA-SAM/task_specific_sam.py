@@ -88,7 +88,6 @@ class Decoder_block(nn.Module):
     def forward(self, tokens, src1, src2, position):
         
         position = position.flatten(2).permute(0, 2, 1)
-
         # token self_attn
         tokens_self_attn = self.token_self_attn(q=tokens, k=tokens, v=tokens)
         tokens_ = tokens + tokens_self_attn
@@ -96,11 +95,18 @@ class Decoder_block(nn.Module):
 
         
         # cross attn, tokens attending to image2 embedding
-        q = tokens_ + tokens
-        k = src2 + position
-        attn_out = self.cross_attn_token_to_image2(q=q, k=k, v=src2)
-        tokens_ = tokens_ + attn_out
-        tokens_ = self.norm2(tokens_)
+        if not self.first_layer:
+            q = tokens_ + tokens
+            k = src2 + position
+            attn_out = self.cross_attn_token_to_image2(q=q, k=k, v=src2)
+            tokens_ = tokens_ + attn_out
+            tokens_ = self.norm2(tokens_)
+        else:
+            q = tokens_ + tokens
+            k = src1 + position
+            attn_out = self.cross_attn_token_to_image2(q=q, k=k, v=src1)
+            tokens_ = tokens_ + attn_out
+            tokens_ = self.norm2(tokens_)
 
         # MLP block
         mlp_out = self.mlp(tokens_)
