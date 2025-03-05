@@ -58,9 +58,10 @@ class Decoder_transform(nn.Module):
         embedding_dim: int,
         num_heads: int,
         mlp_dim: int,
+        first_layer: bool,
         activation: Type[nn.Module] = nn.ReLU,
         attention_downsample_rate: int = 2,
-        frist_layer: bool=False
+        
     ) -> None:
         
         super().__init__()
@@ -78,7 +79,7 @@ class Decoder_transform(nn.Module):
                     mlp_dim=mlp_dim,
                     activation=activation,
                     attention_downsample_rate=attention_downsample_rate,
-                    first_layer=frist_layer,
+                    first_layer=first_layer,
                 )
             )
         
@@ -90,7 +91,7 @@ class Decoder_transform(nn.Module):
                 position
         ):
         
-        position= position.faltten(2).permute(0,2,1)
+        position= position.flatten(2).permute(0,2,1)
         for layer in self.layers:
             tokens, src1 = layer(
                 tokens=tokens,
@@ -598,6 +599,7 @@ class MaskDecoder_task(nn.Module):
                 num_heads=8,
                 first_layer=(i==num_layer-1)
             )
+
 
             # decoder_block = Decoder_block(
             #     embedding_dim=transformer_dim,
