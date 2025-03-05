@@ -51,6 +51,56 @@ class MLP(nn.Module):
             x = F.sigmoid(x)
         return x
 
+class Decoder_transform(nn.Module):
+    def __init__(
+        self,
+        depth: int,
+        embedding_dim: int,
+        num_heads: int,
+        mlp_dim: int,
+        activation: Type[nn.Module] = nn.ReLU,
+        attention_downsample_rate: int = 2,
+        frist_layer: bool=False
+    ) -> None:
+        
+        super().__init__()
+        self.depth = depth
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.mlp_dim = mlp_dim
+        self.layers = nn.ModuleList()
+
+        for i in range(depth):
+            self.layers.append(
+                Decoder_block(
+                    embedding_dim=embedding_dim,
+                    num_heads=num_heads,
+                    mlp_dim=mlp_dim,
+                    activation=activation,
+                    attention_downsample_rate=attention_downsample_rate,
+                    first_layer=frist_layer,
+                )
+            )
+        
+    def forward(
+                self,
+                tokens,
+                src1,
+                src2,
+                position
+        ):
+        
+        position= position.faltten(2).permute(0,2,1)
+        for layer in self.layers:
+            tokens, src1 = layer(
+                tokens=tokens,
+                src1=src1,
+                src2=src2,
+                position=position
+            )
+            
+        return tokens, src1
+            
 
 class Decoder_block(nn.Module):
     def __init__(
@@ -74,8 +124,9 @@ class Decoder_block(nn.Module):
 
         self.mlp = MLPBlock(embedding_dim, mlp_dim, activation)
         self.norm3 = nn.LayerNorm(embedding_dim)
-
-        self.cross_attn_image1_to_token = Attention(
+        
+        # 可能改成 image1 attending image2 比较合适
+        self.cross_attn_image1_to_image2 = Attention(
             embedding_dim, num_heads, attention_downsample_rate
         )
         self.norm4 = nn.LayerNorm(embedding_dim)
@@ -87,7 +138,7 @@ class Decoder_block(nn.Module):
     
     def forward(self, tokens, src1, src2, position):
         
-        position = position.flatten(2).permute(0, 2, 1)
+        # position = position.flatten(2).permute(0, 2, 1)
         # token self_attn
         tokens_self_attn = self.token_self_attn(q=tokens, k=tokens, v=tokens)
         tokens_ = tokens + tokens_self_attn
@@ -95,19 +146,14 @@ class Decoder_block(nn.Module):
 
         
         # cross attn, tokens attending to image2 embedding
-        if not self.first_layer:
-            q = tokens_ + tokens
-            k = src2 + position
-            attn_out = self.cross_attn_token_to_image2(q=q, k=k, v=src2)
-            tokens_ = tokens_ + attn_out
-            tokens_ = self.norm2(tokens_)
-        else:
-            q = tokens_ + tokens
-            k = src1 + position
-            attn_out = self.cross_attn_token_to_image2(q=q, k=k, v=src1)
-            tokens_ = tokens_ + attn_out
-            tokens_ = self.norm2(tokens_)
-
+        if self.first_layer:
+            src2 = src1
+        q = tokens_ + tokens
+        k = src2 + position
+        attn_out = self.cross_attn_token_to_image2(q=q, k=k, v=src2)
+        tokens_ = tokens_ + attn_out
+        tokens_ = self.norm2(tokens_)
+        
         # MLP block
         mlp_out = self.mlp(tokens_)
         tokens_ = tokens_+mlp_out
@@ -115,8 +161,8 @@ class Decoder_block(nn.Module):
         
         # cross attn, image1 attending to tokens
         q = src1 + position
-        k = tokens_ + tokens
-        attn_out = self.cross_attn_image1_to_token(q=q, k=k, v=tokens_)
+        k = src2 + position
+        attn_out = self.cross_attn_image1_to_image2(q=q, k=k, v=src2)
         src1 = src1 + attn_out
         src1 = self.norm4(src1)
 
@@ -545,21 +591,22 @@ class MaskDecoder_task(nn.Module):
         )
     
         for i in range(num_layer):
-            # n_transformer = TwoWayTransformer(
-            #     depth=2,
-            #     embedding_dim=transformer_dim,
-            #     mlp_dim=2048,
-            #     num_heads=8,
-            # )
-
-            decoder_block = Decoder_block(
+            n_transformer = Decoder_transform(
+                depth=2,
                 embedding_dim=transformer_dim,
-                num_heads=8,
                 mlp_dim=2048,
+                num_heads=8,
                 first_layer=(i==num_layer-1)
             )
+
+            # decoder_block = Decoder_block(
+            #     embedding_dim=transformer_dim,
+            #     num_heads=8,
+            #     mlp_dim=2048,
+            #     first_layer=(i==num_layer-1)
+            # )
             
-            self.transformer_list.append(decoder_block)
+            self.transformer_list.append(n_transformer)
         
         self.final_attn_token_to_image = Attention(
             transformer_dim, num_heads=8, downsample_rate=2
@@ -956,13 +1003,13 @@ class Sam_task(nn.Module):
         sam_dict.update(neck_list_state_dict)
 
         # load prompt_encoder
-        prompt_encoder_keys = [k for k in sam_keys if 'u_decoder' in k]
+        prompt_encoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
         prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
         prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
         sam_dict.update(prompt_encoder_state_dict)
 
         # load mask_decoder
-        mask_decoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
+        mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k]
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
