@@ -527,14 +527,15 @@ class MaskDecoder_task(nn.Module):
                 src = src + dense_prompt_embeddings
                 b, c, h, w = src.shape
                 src = src.flatten(2).permute(0,2,1)
-                # pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
-                pos_src = src
+                src2 = src
+                pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
+
             else:
-                pos_src = image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                src2 = image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
              
-            hs, src = self.transformer_list[i](src, pos_src, hs)
+            hs, src = self.transformer_list[i](src, src2, pos_src, hs)
         
         
         iou_token_out = hs[:, 0, :]

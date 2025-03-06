@@ -63,6 +63,7 @@ class TwoWayTransformer(nn.Module):
         self,
         image_embedding: Tensor,
         image_pe: Tensor,
+        pos_src: Tensor,
         point_embedding: Tensor,
     ) -> Tuple[Tensor, Tensor]:
         """
@@ -81,7 +82,7 @@ class TwoWayTransformer(nn.Module):
         # BxCxHxW -> BxHWxC == B x N_image_tokens x C
         # bs, c, h, w = image_embedding.shape
         # image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
-        # image_pe = image_pe.flatten(2).permute(0, 2, 1)
+        pos_src = pos_src.flatten(2).permute(0, 2, 1)
 
         # Prepare queries
         queries = point_embedding
@@ -92,13 +93,13 @@ class TwoWayTransformer(nn.Module):
             queries, keys = layer(
                 queries=queries,
                 keys=keys,
-                query_pe=point_embedding,
+                pos_src=pos_src,
                 key_pe=image_pe,
             )
 
         # Apply the final attenion layer from the points to the image
         q = queries
-        k = keys
+        k = keys + pos_src
         attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
         queries = queries + attn_out
         queries = self.norm_final_attn(queries)
@@ -149,19 +150,16 @@ class TwoWayAttentionBlock(nn.Module):
         self.skip_first_layer_pe = skip_first_layer_pe
 
     def forward(
-        self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_pe: Tensor
+        self, queries: Tensor, keys: Tensor, pos_src: Tensor, key_pe: Tensor
     ) -> Tuple[Tensor, Tensor]:
         # Self attention block
         attn_out = self.self_attn(q=queries, k=queries, v=queries)
         queries = queries + attn_out
         queries = self.norm1(queries)
         
-        # if self.skip_first_layer_pe:
-            # cross_attn to image 2 
-        attn_out = self.cross_attn_token_to_image(q=queries, k=key_pe, v=key_pe)
-        # else:
-            # cross_attn to image 1
-            # attn_out = self.cross_attn_token_to_image(q=queries, k=keys, v=keys)
+        # Cross attention block, token to image 2
+        k = key_pe + pos_src
+        attn_out = self.cross_attn_token_to_image(q=queries, k=k, v=key_pe)
         queries = queries + attn_out
         queries = self.norm2(queries)
 
@@ -170,8 +168,9 @@ class TwoWayAttentionBlock(nn.Module):
         queries = queries + mlp_out
         queries = self.norm3(queries)
 
-        # Cross attention block, image embedding attending to tokens
-        attn_out = self.cross_attn_image_to_token(q=keys, k=queries, v=queries)
+        # Cross attention block, image 1 attending to tokens
+        k = keys + pos_src
+        attn_out = self.cross_attn_image_to_token(q=k, k=queries, v=queries)
         keys = keys + attn_out
         keys = self.norm4(keys)
 
