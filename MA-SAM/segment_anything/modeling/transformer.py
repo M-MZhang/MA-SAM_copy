@@ -165,7 +165,7 @@ class TwoWayAttentionBlock(nn.Module):
         # Cross attention block, token to image 2
         q = queries + query_pe
         k = key_pe + pos_src
-        attn_out = self.cross_attn_token_to_image(q=queries, k=k, v=key_pe)
+        attn_out = self.cross_attn_token_to_image(q=q, k=k, v=key_pe)
         queries = queries + attn_out
         queries = self.norm2(queries)
 
