@@ -553,13 +553,19 @@ class MaskDecoder_task(nn.Module):
 
         # mask [bs, num_task, output_size, output_size]
         x = F.interpolate(masks, scale_factor=0.125, mode='bilinear')
+        inter_mask_list = []
         for i in range(self.num_layer-2, -1, -1):
             shortcut = x
-            x = -1*(torch.softmax(x,dim=1)) + 1
+            x = -1*(torch.softmax(x, dim=1)) + 1
+            reverse_mask_list = []
             for j in range(self.num_mask_tokens):
-                x[:, j, :] = x.unsqueeze(1).expand(-1, mask_tokens_out.shape[-1], -1, -1).mul(src[i])
-                reverse_mask = (hs_list[i][:,1+j, :] @ x.flatten(2))
+                x[:, j, :] = x.flatten(1).unsqueeze(-1).expand(-1, -1, mask_tokens_out.shape[-1]).mul(src_list[i]) #[bs, 1024, 256]
+                reverse_mask_list.append(hs_list[i][:,1+j, :].unsqueeze(1) @ x.transpose(1, 2)) #[bs, 1, 1024]
+            reverse_mask = torch.stack(reverse_mask_list, dim=1) #[bs, 13, 1024]
+            x = reverse_mask.view(b, c, h, w) + shortcut
+            inter_mask_list.append(F.interpolate(x,scale_factor=8, mode='bilinear'))
 
+        masks = F.interpolate(x, scale_factor=8, mode='bilinear')
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
