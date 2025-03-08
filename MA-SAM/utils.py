@@ -13,6 +13,8 @@ import pickle
 import math
 from torch.optim.lr_scheduler import LambdaLR
 import nibabel as nib
+import json
+import errno
 
 
 class DiceLoss(nn.Module):
@@ -56,6 +58,27 @@ class DiceLoss(nn.Module):
             loss += dice * weight[i]
         return loss / self.n_classes
 
+def mkdir_if_missing(dirname):
+    """Create dirname if it is missing."""
+    if not os.path.exists(dirname):
+        try:
+            os.makedirs(dirname)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+
+def read_json(fpath):
+    """Read json file from a path."""
+    with open(fpath, "r") as f:
+        obj = json.load(f)
+    return obj
+
+
+def write_json(obj, fpath):
+    """Writes to a json file."""
+    mkdir_if_missing(os.path.dirname(fpath))
+    with open(fpath, "w") as f:
+        json.dump(obj, f, indent=4, separators=(",", ": "))
 
 def calculate_metric_percase(pred, gt):
     pred[pred > 0] = 1

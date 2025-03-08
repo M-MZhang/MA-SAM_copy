@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 from importlib import import_module
 from segment_anything import sam_model_registry
+from torch.nn.modules.loss import CrossEntropyLoss
+from utils import DiceLoss
 
 from icecream import ic
 import pandas as pd
@@ -18,7 +20,7 @@ import pickle
 from datetime import datetime
 from einops import repeat
 from scipy.ndimage import zoom
-from utils import calculate_metric_percase
+from utils import calculate_metric_percase, write_json
 import nibabel as nib
 
 from datasets.dataset import dataset_reader, RandomGenerator
@@ -76,30 +78,30 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
     for i in range(1, classes + 1):
         metric_list.append(calculate_metric_percase(prediction == i, label == i))
 
-    # if test_save_path is not None:
+    if test_save_path is not None:
         
-    #     image_data = np.moveaxis(image[:,:,:,2].astype(np.float32), 0, -1)
-    #     prediction_data = np.moveaxis(prediction.astype(np.float32), 0, -1)
-    #     label_data = np.moveaxis(label.astype(np.float32), 0, -1)
+        image_data = np.moveaxis(image[:,:,:,2].astype(np.float32), 0, -1)
+        prediction_data = np.moveaxis(prediction.astype(np.float32), 0, -1)
+        label_data = np.moveaxis(label.astype(np.float32), 0, -1)
 
-    #     image_data = np.rot90(np.flip(image_data, axis=1), k=-1, axes=(0, 1))
-    #     prediction_data = np.rot90(np.flip(prediction_data, axis=1), k=-1, axes=(0, 1))
-    #     label_data = np.rot90(np.flip(label_data, axis=1), k=-1, axes=(0, 1))
+        image_data = np.rot90(np.flip(image_data, axis=1), k=-1, axes=(0, 1))
+        prediction_data = np.rot90(np.flip(prediction_data, axis=1), k=-1, axes=(0, 1))
+        label_data = np.rot90(np.flip(label_data, axis=1), k=-1, axes=(0, 1))
 
-    #     # Create Nifti images
-    #     img_nifti = nib.Nifti1Image(image_data, np.eye(4))
-    #     prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
-    #     lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
+        # Create Nifti images
+        img_nifti = nib.Nifti1Image(image_data, np.eye(4))
+        prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
+        lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
 
-    #     # Set spacing
-    #     img_nifti.header['pixdim'][1:4] = [1, 1, 1]
-    #     prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
-    #     lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
+        # Set spacing
+        img_nifti.header['pixdim'][1:4] = [1, 1, 1]
+        prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
+        lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
 
-    #     # Save the images
-    #     img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
-    #     prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
-    #     lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
+        # Save the images
+        img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
+        prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
+        lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
         
     return metric_list
 
@@ -158,6 +160,63 @@ def inference(args, multimask_output, model, test_save_path=None):
     logging.info("Testing Finished!")
     return 1
 
+def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
+    Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
+    ce_loss = CrossEntropyLoss(ignore_index=-100, reduction='mean')
+  
+    ce_dict = {}
+    dice_dict = {}
+    model.eval()
+    for polyp in Polyp_name:
+        db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
+                                transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
+                                test_name=polyp)
+       
+        print("The length of test set {} is: {}".format(polyp, len(db_test)))
+        
+        batch_size = args.batch_size * args.n_gpu
+        def worker_init_fn(worker_id):
+            random.seed(args.seed + worker_id)
+
+        testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+                             worker_init_fn=worker_init_fn, drop_last=False)
+
+        ce = 0
+        dice = 0
+        num_test = 0
+        for i_batch, sampled_batch in enumerate(testdataloader):
+            # print(i_batch)
+            image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
+            hw_size = image_batch.shape[-1]
+            label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
+
+            image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
+            
+            with torch.no_grad():
+                outputs = model(image_batch, multimask_output, args.img_size)
+                low_res_logits = outputs['low_res_logits']
+                
+                ce += 1 - ce_loss(low_res_logits, label_batch) * image_batch.shape[0]
+
+                out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+                out = out.cpu().detach().numpy()
+                label_batch = label_batch.cpu().detach().numpy()
+                dice += calculate_metric_percase(out, label_batch) * image_batch.shape[0]
+
+                num_test += image_batch.shape[0]
+        
+
+        ce = ce / num_test
+        dice = dice / num_test
+    
+        ce_dict[polyp] = ce
+        dice_dict[polyp] = dice
+    
+    loss = {'ce_loss':ce_dict, 'dice_loss': dice_dict}
+    write_json(loss, test_save_path+'/result.json')
+    print("Finish test haha!")
+    
+
 
 def config_to_dict(config):
     items_dict = {}
@@ -171,16 +230,18 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/epoch_209.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
-    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/Vanille_me_v6.6_3debug')
-    parser.add_argument('--num_classes', type=int, default=12)
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/v6.7_polyp/epoch_159.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/Polyp')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/v6.7_polyp')
+    parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch_size per gpu')
+    parser.add_argument('--n_gpu', type=int, default=2, help='total gpu')   
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
+    parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
     parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
@@ -207,7 +268,7 @@ if __name__ == '__main__':
                                                                 pixel_std=[1., 1., 1.])
     
     pkg = import_module(args.module)
-    net = pkg.Sam_task(sam, r=4).cuda() 
+    net = pkg.Sam_task(sam, r=32).cuda() 
     # net = sam.cuda()
 
     assert args.adapt_ckpt is not None
@@ -224,15 +285,19 @@ if __name__ == '__main__':
     if not os.path.exists(log_folder):
         os.makedirs(log_folder)
     # time
-    output_filename = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    output_filename = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     logging.basicConfig(filename= log_folder+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
 
-    # args.is_savenii = False #暂时不保存可视化的东西
+
     if args.is_savenii:
-        test_save_path = args.output_dir
+        test_save_path = log_folder
     else:
         test_save_path = None
-    inference(args, multimask_output, net, test_save_path)
+
+
+    low_res = img_embedding_size * 4
+    inference_2d(args, multimask_output, net,  low_res, log_folder)
+
