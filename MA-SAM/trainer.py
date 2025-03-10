@@ -128,7 +128,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         random.seed(args.seed + worker_id)
 
     trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
-                             worker_init_fn=worker_init_fn, drop_last=True)
+                             worker_init_fn=worker_init_fn, drop_last=False) # 这个drop_last好像会有点什么问题？
     
     num = 0
     for name, para in model.named_parameters():

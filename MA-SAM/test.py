@@ -20,7 +20,7 @@ import pickle
 from datetime import datetime
 from einops import repeat
 from scipy.ndimage import zoom
-from utils import calculate_metric_percase, write_json
+from utils import calculate_metric_percase, write_json, IoU
 import nibabel as nib
 
 from datasets.dataset import dataset_reader, RandomGenerator
@@ -162,9 +162,10 @@ def inference(args, multimask_output, model, test_save_path=None):
 
 def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
-    ce_loss = CrossEntropyLoss(ignore_index=-100, reduction='mean')
+    # Polyp_name = ['CVC-300']
+    iou_loss = IoU(reduction='mean')
   
-    ce_dict = {}
+    iou_dict = {}
     dice_dict = {}
     model.eval()
     for polyp in Polyp_name:
@@ -181,7 +182,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
         testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                              worker_init_fn=worker_init_fn, drop_last=False)
 
-        ce = 0
+        iou = 0
         dice = 0
         num_test = 0
         for i_batch, sampled_batch in enumerate(testdataloader):
@@ -196,23 +197,23 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
                 outputs = model(image_batch, multimask_output, args.img_size)
                 low_res_logits = outputs['low_res_logits']
                 
-                ce += 1 - ce_loss(low_res_logits, label_batch) * image_batch.shape[0]
-
                 out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
                 out = out.cpu().detach().numpy()
                 label_batch = label_batch.cpu().detach().numpy()
+                iou += iou_loss(out, label_batch) * image_batch.shape[0]
                 dice += calculate_metric_percase(out, label_batch) * image_batch.shape[0]
 
                 num_test += image_batch.shape[0]
         
 
-        ce = ce / num_test
+        iou = iou / num_test
         dice = dice / num_test
     
-        ce_dict[polyp] = ce
+        iou_dict[polyp] = iou
         dice_dict[polyp] = dice
+        print("{}: DICE:{}, IoU:{}".format(polyp, dice, iou))
     
-    loss = {'ce_loss':ce_dict, 'dice_loss': dice_dict}
+    loss = {'DICE':dice_dict, 'IoU': iou_dict}
     write_json(loss, test_save_path+'/result.json')
     print("Finish test haha!")
     

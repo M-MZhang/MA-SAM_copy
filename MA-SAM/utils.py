@@ -93,6 +93,36 @@ def calculate_metric_percase(pred, gt):
     elif pred.sum() == 0 and gt.sum() == 0:
         return 1
 
+class IoU(nn.Module):
+    
+    def __init__(self, reduction='mean'):
+        super(IoU, self).__init__()
+        self.reduction = reduction
+ 
+    def leave_only_batch_and_flatten(self, inputs, targets):
+        inputs = inputs.reshape(inputs.shape[0], -1)
+        targets = targets.reshape(targets.shape[0], -1)
+        return inputs, targets
+ 
+    def forward(self, inputs, targets, smooth=1):
+ 
+        inputs, targets = self.leave_only_batch_and_flatten(inputs, targets)
+        # inputs_after_sigmoid = torch.sigmoid(inputs)
+ 
+        intersection = (inputs * targets).sum(1)
+        total = (inputs + targets).sum(1)
+        union = total - intersection
+ 
+        IoU = (intersection + smooth)/(union + smooth)
+       
+ 
+        if self.reduction == 'mean':
+            return IoU.mean()
+        elif self.reduction == 'sum':
+            return IoU.sum()
+        else:
+            return IoU
+
 
 class WarmupCosineSchedule(LambdaLR):
     """ Linear warmup and then cosine decay.
