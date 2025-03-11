@@ -371,7 +371,10 @@ class dataset_reader(Dataset):
         elif split == 'val':
             self.sample_list = val_list
         elif split == 'test':
-            self.sample_list = test_list[test_name]
+            if test_name is not None:
+                self.sample_list = test_list[test_name]
+            else:
+                self.sample_list = test_list
         
         self.num_classes = num_classes
 
