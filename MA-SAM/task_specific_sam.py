@@ -446,7 +446,8 @@ class MaskDecoder_task(nn.Module):
         self.num_mask_tokens = MaskDecoder.num_mask_tokens
         self.num_layer = num_layer
         
-        self.transformer_list = nn.ModuleList()
+        self.decoder_transformer_list = nn.ModuleList()
+        self.fusion_transformer_list = nn.ModuleList()
         
         self.iou_tokens = nn.Embedding(1, transformer_dim)
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
@@ -472,14 +473,23 @@ class MaskDecoder_task(nn.Module):
         )
     
         for i in range(num_layer):
-            n_transformer = TwoWayTransformer(
+            decoder_transformer = TwoWayTransformer(
                 depth=2,
                 embedding_dim=transformer_dim,
                 mlp_dim=2048,
                 num_heads=8,
             )
             
-            self.transformer_list.append(n_transformer)
+            fusion_transformer = TwoWayTransformer(
+                depth=1,
+                embedding_dim=transformer_dim,
+                mlp_dim=2048,
+                num_heads=8,
+                first_transform=(i==0),
+            )
+
+            self.decoder_transformer_list.append(decoder_transformer)
+            self.fusion_transformer_list.append(fusion_transformer)
         
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
@@ -520,27 +530,36 @@ class MaskDecoder_task(nn.Module):
         # Run the transforme
         for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
             # Expand per-image data in batch direction to be per-mask
+            # decoder_transform
+            mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+            decoder_hs = torch.cat((sparse_prompt_embeddings, mask_tokens), dim=1)
+            decoder_src = torch.repeat_interleave(image_embeddings[i], decoder_hs.shape[0], dim=0)
+            b, c, h, w = decoder_src.shape
+            decoder_src = decoder_src.flatten(2).permute(0, 2, 1)
+            pos_src = torch.repeat_interleave(image_pe, decoder_hs.shape[0], dim=0)
+        
+            decoder_hs, decoder_src = self.decoder_transformer_list[i](decoder_src, pos_src, decoder_hs)
+            
+            
             if i == self.num_layer-1:
-                mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
-                hs = torch.cat((output_tokens, sparse_prompt_embeddings, mask_tokens), dim=1)
-                src = torch.repeat_interleave(image_embeddings[i], hs.shape[0], dim=0)
-                src = src + dense_prompt_embeddings
-                b, c, h, w = src.shape
-                src = src.flatten(2).permute(0,2,1)
-                pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
+                src0 = image_embeddings[i].flatten(2).permute(0, 2, 1)
+                # fusion transofrm
+                output_tokens = output_tokens.unsqueeze(0).expand(decoder_hs.size(0), -1, -1)
+                fusion_hs = torch.cat((output_tokens, decoder_hs), dim=1)
+                # fusion_src = torch.repeat_interleave(image_embeddings[i], decoder_hs.shape[0], dim=0)
+                fusion_src = src0 + decoder_src 
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
-                mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
-                hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
-             
-            hs, src = self.transformer_list[i](src, pos_src, hs)
+                fusion_hs = torch.cat((fusion_hs[:, :-self.num_mask_tokens, :], decoder_hs), dim=1)
+                fusion_src = fusion_src + decoder_src + src0
+            
+            fusion_hs, fusion_src = self.fusion_transformer_list[i](fusion_src, pos_src, fusion_hs)
         
         
-        iou_token_out = hs[:, 0, :]
-        mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
+        iou_token_out = fusion_hs[:, 0, :]
+        mask_tokens_out = fusion_hs[:, 1 : (1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
-        src = src.transpose(1, 2).view(b, c, h, w)
+        src = fusion_src.transpose(1, 2).view(b, c, h, w)
         # print(src.shape)
         upscaled_embedding = self.output_upscaling(src) #[b, embed_dim//32, pos_dim*16]
         # print(upscaled_embedding.shape)

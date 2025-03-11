@@ -22,6 +22,7 @@ class TwoWayTransformer(nn.Module):
         mlp_dim: int,
         activation: Type[nn.Module] = nn.ReLU,
         attention_downsample_rate: int = 2,
+        first_transform:bool=False
     ) -> None:
         """
         A transformer decoder that attends to an input image using
@@ -58,6 +59,7 @@ class TwoWayTransformer(nn.Module):
             embedding_dim, num_heads, downsample_rate=attention_downsample_rate
         )
         self.norm_final_attn = nn.LayerNorm(embedding_dim)
+        self.first_transform = first_transform
 
     def forward(
         self,
@@ -97,11 +99,12 @@ class TwoWayTransformer(nn.Module):
             )
 
         # Apply the final attenion layer from the points to the image
-        q = queries + point_embedding
-        k = keys + image_pe
-        attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
-        queries = queries + attn_out
-        queries = self.norm_final_attn(queries)
+        if self.first_transform:
+            q = queries + point_embedding
+            k = keys + image_pe
+            attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
+            queries = queries + attn_out
+            queries = self.norm_final_attn(queries)
 
         return queries, keys
 
@@ -152,12 +155,12 @@ class TwoWayAttentionBlock(nn.Module):
         self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_pe: Tensor
     ) -> Tuple[Tensor, Tensor]:
         # Self attention block
-        if self.skip_first_layer_pe:
-            queries = self.self_attn(q=queries, k=queries, v=queries)
-        else:
-            q = queries + query_pe
-            attn_out = self.self_attn(q=q, k=q, v=queries)
-            queries = queries + attn_out
+        # if self.skip_first_layer_pe:
+        #     queries = self.self_attn(q=queries, k=queries, v=queries)
+        # else:
+        q = queries + query_pe
+        attn_out = self.self_attn(q=q, k=q, v=queries)
+        queries = queries + attn_out
         queries = self.norm1(queries)
 
         # Cross attention block, tokens attending to image embedding
