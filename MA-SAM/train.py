@@ -17,9 +17,9 @@ import os
 # os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3,4,5,6,7"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/isic2018', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/v6.7_isic')
-parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/isic2018')
+parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/Polyp', help='root dir for data')
+parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/v6.7_polyp_B_2')
+parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/Polyp')
 parser.add_argument('--num_classes', type=int, default=1, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=64, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=2, help='total gpu')

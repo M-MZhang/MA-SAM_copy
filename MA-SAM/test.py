@@ -161,61 +161,59 @@ def inference(args, multimask_output, model, test_save_path=None):
     return 1
 
 def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
-    # Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
+    Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
     # Polyp_name = ['CVC-300']
     iou_loss = IoU(reduction='mean')
   
     iou_dict = {}
     dice_dict = {}
     model.eval()
-    # for polyp in Polyp_name:
-    db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
-                            transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
-                            test_name=None)
-    
-    print("The length of test set is: {}".format(len(db_test)))
-    
-    batch_size = args.batch_size * args.n_gpu
-    def worker_init_fn(worker_id):
-        random.seed(args.seed + worker_id)
-
-    testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
-                            worker_init_fn=worker_init_fn, drop_last=False)
-
-    iou = 0
-    dice = 0
-    num_test = 0
-    for i_batch, sampled_batch in enumerate(testdataloader):
-        # print(i_batch)
-        image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
-        hw_size = image_batch.shape[-1]
-        label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
-
-        image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
+    for polyp in Polyp_name:
+        db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
+                                transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
+                                test_name=polyp)
+       
+        print("The length of test set {} is: {}".format(polyp, len(db_test)))
         
-        with torch.no_grad():
-            outputs = model(image_batch, multimask_output, args.img_size)
-            low_res_logits = outputs['low_res_logits']
+        batch_size = args.batch_size * args.n_gpu
+        def worker_init_fn(worker_id):
+            random.seed(args.seed + worker_id)
+
+        testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+                             worker_init_fn=worker_init_fn, drop_last=False)
+
+        iou = 0
+        dice = 0
+        num_test = 0
+        for i_batch, sampled_batch in enumerate(testdataloader):
+            # print(i_batch)
+            image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
+            hw_size = image_batch.shape[-1]
+            label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
+
+            image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
             
-            out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
-            out = out.cpu().detach().numpy()
-            label_batch = label_batch.cpu().detach().numpy()
-            iou += iou_loss(out, label_batch) * image_batch.shape[0]
-            dice += calculate_metric_percase(out, label_batch) * image_batch.shape[0]
+            with torch.no_grad():
+                outputs = model(image_batch, multimask_output, args.img_size)
+                low_res_logits = outputs['low_res_logits']
+                
+                out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+                out = out.cpu().detach().numpy()
+                label_batch = label_batch.cpu().detach().numpy()
+                iou += iou_loss(out, label_batch) * image_batch.shape[0]
+                dice += calculate_metric_percase(out, label_batch) * image_batch.shape[0]
 
-            num_test += image_batch.shape[0]
+                num_test += image_batch.shape[0]
         
 
-    iou = iou / num_test
-    dice = dice / num_test
+        iou = iou / num_test
+        dice = dice / num_test
     
-        # iou_dict[polyp] = iou
-        # dice_dict[polyp] = dice
-        # print("{}: DICE:{}, IoU:{}".format(polyp, dice, iou))
-    # print("DICE:{}, IoU:{}".format(dice, iou))s
-    logging.info("DICE:{}, IoU:{}".format(dice, iou))
+        iou_dict[polyp] = iou
+        dice_dict[polyp] = dice
+        logging.info("{}: DICE:{}, IoU:{}".format(polyp, dice, iou))
     
-    loss = {'DICE':dice, 'IoU': iou}
+    loss = {'DICE':dice_dict, 'IoU': iou_dict}
     if test_save_path is not None:
         write_json(loss, test_save_path+'/result.json')
     print("Finish test haha!")
@@ -234,9 +232,9 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/v6.7_isic2017_B/epoch_179.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/isic2017')
-    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/v6.7_isic2017_B')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/v6.7_polyp/epoch_159.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/Polyp')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/v6.7_polyp')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=32, help='batch_size per gpu')
@@ -245,8 +243,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-    parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_b_01ec64.pth', help='Pretrained checkpoint')
-    parser.add_argument('--vit_name', type=str, default='vit_b', help='Select one vit model')
+    parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
+    parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
     parser.add_argument('--module', type=str, default='task_specific_sam')
