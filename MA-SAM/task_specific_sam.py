@@ -4,6 +4,7 @@ from torch.nn import functional as F
 from icecream import ic
 from typing import Type
 import math
+import copy
 
 from typing import Any, Dict, List, Tuple
 
@@ -46,7 +47,7 @@ class MLP(nn.Module):
     def forward(self, x):
         for i, layer in enumerate(self.layers):
             # x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-            x = F.leaky_relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x
@@ -241,11 +242,11 @@ class Task_adapter(nn.Module):
         for i in range(self.num_layers):
             self.task_adapter_mlp_list.append(nn.Sequential(
                 nn.Linear(decoder_dim, image_dim//4),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim//4, image_dim//4),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim//4, image_dim),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim, image_dim), #增加一项全连接层
                 ) 
             )
@@ -288,9 +289,9 @@ class Mask_adapter(nn.Module):
             
             self.neck_list.append(nn.Sequential(
                 nn.Linear(image_dim, image_dim//4),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim//4, image_dim//4),
-                nn.LeakyReLU(),
+                nn.ReLU(),
                 nn.Linear(image_dim//4, decoder_dim),
             ))
     
@@ -477,9 +478,11 @@ class MaskDecoder_task(nn.Module):
                 embedding_dim=transformer_dim,
                 mlp_dim=2048,
                 num_heads=8,
+                final_trans=(i==0)
             )
-            
             self.transformer_list.append(n_transformer)
+            
+            # self.transformer_list.append(copy.deepcopy(MaskDecoder.transformer))
         
         # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
            
@@ -527,11 +530,13 @@ class MaskDecoder_task(nn.Module):
                 src = src + dense_prompt_embeddings
                 b, c, h, w = src.shape
                 src = src.flatten(2).permute(0,2,1)
+                src0 = src
+                hs0=hs
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # use other image_embedding as adapter
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) + src0# use other image_embedding as adapter
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
-                hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)
+                hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1) 
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
         

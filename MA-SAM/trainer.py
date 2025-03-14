@@ -18,7 +18,7 @@ from utils import DiceLoss
 from torchvision import transforms
 from icecream import ic
 from datetime import datetime
-from test import inference
+from test import inference, inference_2d
 from torch.optim.lr_scheduler import _LRScheduler
 
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
@@ -127,7 +127,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=12, pin_memory=True,
                              worker_init_fn=worker_init_fn, drop_last=False) # 这个drop_last好像会有点什么问题？
     
     num = 0
@@ -155,7 +155,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             logging.info(name)
     logging.info("The number of trainable parameters is {}M".format(num/1000000))
 
-    model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
+    # model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
@@ -245,7 +245,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 model.module.save_parameters(save_mode_path)
                 # torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
-            # inference(args, multimask_output, model, None)
+            inference_2d(args, multimask_output, model,  low_res, None)
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
