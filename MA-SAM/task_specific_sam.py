@@ -477,6 +477,7 @@ class MaskDecoder_task(nn.Module):
                 embedding_dim=transformer_dim,
                 mlp_dim=2048,
                 num_heads=8,
+                first_transform = (i==0)
             )
             
             self.transformer_list.append(n_transformer)
