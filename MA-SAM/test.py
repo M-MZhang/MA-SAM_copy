@@ -211,10 +211,11 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     
         iou_dict[polyp] = iou
         dice_dict[polyp] = dice
-        print("{}: DICE:{}, IoU:{}".format(polyp, dice, iou))
+        logging.info("{}: DICE:{}, IoU:{}".format(polyp, dice, iou))
     
     loss = {'DICE':dice_dict, 'IoU': iou_dict}
-    write_json(loss, test_save_path+'/result.json')
+    if test_save_path:
+        write_json(loss, test_save_path+'/result.json')
     print("Finish test haha!")
     
 

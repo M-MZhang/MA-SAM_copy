@@ -18,7 +18,7 @@ from utils import DiceLoss
 from torchvision import transforms
 from icecream import ic
 from datetime import datetime
-from test import inference
+from test import inference, inference2d
 from torch.optim.lr_scheduler import _LRScheduler
 
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
@@ -246,6 +246,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 # torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
             # inference(args, multimask_output, model, None)
+            inference2d(args, multimask_output, model, low_res, test_save_path=None)
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
