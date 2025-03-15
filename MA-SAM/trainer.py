@@ -18,7 +18,7 @@ from utils import DiceLoss
 from torchvision import transforms
 from icecream import ic
 from datetime import datetime
-from test import inference, inference2d
+from test import inference, inference_2d
 from torch.optim.lr_scheduler import _LRScheduler
 
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
@@ -127,7 +127,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=12, pin_memory=True,
                              worker_init_fn=worker_init_fn, drop_last=False) # 这个drop_last好像会有点什么问题？
     
     num = 0
@@ -246,7 +246,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 # torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
             # inference(args, multimask_output, model, None)
-            inference2d(args, multimask_output, model, low_res, test_save_path=None)
+            inference_2d(args, multimask_output, model, low_res, test_save_path=None)
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
