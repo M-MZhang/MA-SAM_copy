@@ -384,13 +384,13 @@ class dataset_reader(Dataset):
     def __getitem__(self, idx):
         # if self.split == "train":
 
-        data = np.load(self.sample_list[idx]['image'])
+        data = np.load(self.sample_list[idx])['image']
         data = np.clip(data, HU_min, HU_max)
         
         data = np.float32(data)
         data = (data-data.min())/(data.max()-data.min()+0.00000001)
         # repeat for 3 times
-        data = np.repeat(data, 3, aixs=-1)
+        data = np.repeat(data[:,:,None], 3, axis=-1)
         h, w, c= data.shape
 
         data = np.float32(data) 
@@ -398,7 +398,7 @@ class dataset_reader(Dataset):
         # mask = cv2.imread(self.sample_list[idx]['masks'],0)
         # mask = np.float32(mask)
         # mask = mask/255
-        mask = np.load(self.sample_list[idx]['label'])
+        mask = np.load(self.sample_list[idx])['label']
         # (512, 512) float状态的
         
         
@@ -414,5 +414,6 @@ class dataset_reader(Dataset):
             sample = self.transform(sample)
             sample['label'] = np.squeeze(sample['label'], axis=0)
 
-        sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
+        # sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
+        sample['case_name'] = self.sample_list[idx].split('/')[-1].split('.npz')[0]
         return sample

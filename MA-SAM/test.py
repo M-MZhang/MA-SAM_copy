@@ -50,9 +50,10 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
         if x != patch_size[0] or y != patch_size[1]:
             slice = zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3)
         
-        inputs = torch.from_numpy(slice).unsqueeze(0).float().cuda() #[b, h, w, c]
-        inputs = repeat(inputs, 'b h w c -> b c h w', repeat=3)
-        inputs = torch.permute(inputs, (0, 3, 1, 2))
+        inputs = torch.from_numpy(slice).unsqueeze(0).float().cuda() #[c, h, w, c]
+        inputs = repeat(inputs, 'c h w  ->  (repeat c) h w', repeat=3)
+        # inputs = torch.permute(inputs, (0, 3, 1, 2))
+        inputs = inputs.unsqueeze(0) # batch_size
         net.eval()
         with torch.no_grad():
             outputs = net(inputs, multimask_output, patch_size[0])
@@ -114,11 +115,11 @@ def inference(args, multimask_output, model, test_save_path=None):
     for data_fd in tqdm(data_fd_list):
         file_path = args.data_path +'/test_vol_h5'+'/case'+str(data_fd)+'.npy.h5'
         with h5py.File(file_path, 'r') as f:
-            image_arr_list = np.numpy(f['image'])
-            mask_arr_list = np.numpy(f['label'])
+            image_arr_list = np.array(f['image'])
+            mask_arr_list = np.array(f['label'])
         
-        image = np.expand_dims(np.stack(image_arr_list), axis=0) #[1, d, h, w]
-        label = np.expand_dims(np.stack(mask_arr_list), axis=0) #[1, d, h, w]
+        image = np.expand_dims(image_arr_list, axis=0) #[1, d, h, w]
+        label = np.expand_dims(mask_arr_list, axis=0) #[1, d, h, w]
         case_name = data_fd
 
         h, w = image.shape[2], image.shape[3]
