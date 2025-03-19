@@ -481,7 +481,10 @@ class MaskDecoder_task(nn.Module):
             
             self.transformer_list.append(n_transformer)
         
-        # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
+        self.u_fusion = nn.Sequential(
+            nn.Conv2d(self.num_mask_tokens, self.num_mask_tokens, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(self.num_mask_tokens, self.num_mask_tokens, kernel_size=1, bias=False)
+        )
            
     
     def forward(
@@ -501,7 +504,10 @@ class MaskDecoder_task(nn.Module):
             dense_prompt_embeddings=dense_prompt_embeddings,
             task_specific_embed = task_specific_embed, 
         )
-                
+        
+        # 各通道之间进行一个融合对比
+        masks = self.u_fusion(masks)
+
         return masks, iou_pred
 
     def predict_masks(
@@ -564,21 +570,11 @@ class MaskDecoder_task(nn.Module):
 class U_decoder(nn.Module):
     def __init__(
             self,
-            decoder_dim: int,
-            global_attn_num : int
+            num_tasks: int,
     ):
         super().__init__()
-        self.u_fusion_list = nn.ModuleList()
-        for i in range(global_attn_num):
-            self.u_fusion_list.append(nn.Sequential(
-                       nn.Conv2d(
-                           decoder_dim*2,
-                           decoder_dim,
-                           kernel_size=1,
-                           bias=False, #根据neck的经验如此
-                       ),
-                       LayerNorm2d(decoder_dim)
-                    ))
+       
+        self.u_fusion = nn.Conv2d(num_tasks,num_tasks,kernel_size=1,bias=False)
     
     def forward(self, src1, src2, i):
         src = torch.cat([src1, src2], dim=1)
