@@ -384,21 +384,26 @@ class dataset_reader(Dataset):
     def __getitem__(self, idx):
         # if self.split == "train":
 
-        data = read_image(self.sample_list[idx]['images'])
+        data = np.load(self.sample_list[idx]['image'])
         data = np.clip(data, HU_min, HU_max)
         
         data = np.float32(data)
         data = (data-data.min())/(data.max()-data.min()+0.00000001)
+        # repeat for 3 times
+        data = np.repeat(data, 3, aixs=-1)
         h, w, c= data.shape
 
-        data = np.float32(data) #降到只有一维
+        data = np.float32(data) 
         
-        mask = cv2.imread(self.sample_list[idx]['masks'],0)
-        mask = np.float32(mask)
-        mask = mask/255
+        # mask = cv2.imread(self.sample_list[idx]['masks'],0)
+        # mask = np.float32(mask)
+        # mask = mask/255
+        mask = np.load(self.sample_list[idx]['label'])
+        # (512, 512) float状态的
         
-        if self.num_classes==12:
-            mask[mask==13] = 12
+        
+        # if self.num_classes==12:
+        #     mask[mask==13] = 12
 
         image = np.float32(data)
         label = np.float32(mask)

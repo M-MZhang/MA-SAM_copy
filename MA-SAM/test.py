@@ -26,6 +26,7 @@ import nibabel as nib
 from datasets.dataset import dataset_reader, RandomGenerator
 from torchvision import transforms
 import json
+import h5py
 
 HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
@@ -36,12 +37,11 @@ data_std = 68.47153712416372
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
     image, label = image.squeeze(0), label.squeeze(0) #[d, h, w, 3], [d, h, w]
-    # label = label[:,:,:,2]
+
     
     probability = np.expand_dims(np.zeros_like(label, dtype=np.float32), axis=-1) #[d, h, w, 1]
     probability = repeat(probability, 'd h w c -> d h w (repeat c)', repeat=classes+1) #[d, h, w, classes+1]
 
-    # probability = np.concatenate((probability[0:1], probability[0:1], probability, probability[-1:], probability[-1:]), axis=0)
 
     avg_cnt = np.ones_like(probability, dtype=np.float32) #[d, h, w, classes+1]
     for ind in range(image.shape[0]):
@@ -51,7 +51,7 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
             slice = zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3)
         
         inputs = torch.from_numpy(slice).unsqueeze(0).float().cuda() #[b, h, w, c]
-        # inputs = repeat(inputs, 'b h w c -> b c h w', repeat=3)
+        inputs = repeat(inputs, 'b h w c -> b c h w', repeat=3)
         inputs = torch.permute(inputs, (0, 3, 1, 2))
         net.eval()
         with torch.no_grad():
@@ -106,37 +106,18 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
     return metric_list
 
 def inference(args, multimask_output, model, test_save_path=None):
-    data_fd_list = ['0035', '0036', '0037', '0038', '0039', '0040']
+    data_fd_list = ['0001', '0002', '0003', '0004', '0008', '0022', '0025', '0029', '0032', '0035', '0036', '0038']
     
     model.eval()
     metric_list = []
+    class_to_name = {1: 'Aorta', 2: 'Gallbladder', 3: 'Left kidney', 4: 'Right kidney', 5:'Liver', 6: 'Pancreas', 7: 'Spleen', 8: 'Stomach'}
     for data_fd in tqdm(data_fd_list):
-        image_file_path = args.data_path +'/npy_new'+'/img'+str(data_fd)+'/images'
-        image_file_list = os.listdir(image_file_path)
-        image_file_list.sort()
-        image_arr_list = []
-        mask_arr_list = []
-        for image_file in image_file_list:
-            with open(image_file_path + '/' + image_file, 'rb') as file:
-                image_arr = pickle.load(file)
-            with open(args.data_path + '/npy_new'+'/img'+str(data_fd)+'/masks/'+image_file, 'rb') as file:
-                mask_arr = pickle.load(file)
-
-            image_arr = np.clip(image_arr, HU_min, HU_max)
-            image_arr = (image_arr-HU_min)/(HU_max-HU_min)*255.0
-            image_arr = np.float32(image_arr)
-            image_arr = (image_arr - data_mean) / data_std
-            image_arr = (image_arr-image_arr.min())/(image_arr.max()-image_arr.min()+0.00000001)
-
-            mask_arr = np.float32(mask_arr)
-            if args.num_classes==12:
-                mask_arr[mask_arr==13] = 12
-                class_to_name = {1: 'spleen', 2: 'right kidney', 3: 'left kidney', 4: 'gallbladder', 5:'esophagus', 6: 'liver', 7: 'stomach', 8: 'aorta', 9:'vena', 10:'vein', 11: 'pancreas', 12:'adrenal gland'}
-            
-            image_arr_list.append(image_arr)
-            mask_arr_list.append(mask_arr)
-
-        image = np.expand_dims(np.stack(image_arr_list), axis=0) #[1, d, h, w, 3]
+        file_path = args.data_path +'/test_vol_h5'+'/case'+str(data_fd)+'.npy.h5'
+        with h5py.File(file_path, 'r') as f:
+            image_arr_list = np.numpy(f['image'])
+            mask_arr_list = np.numpy(f['label'])
+        
+        image = np.expand_dims(np.stack(image_arr_list), axis=0) #[1, d, h, w]
         label = np.expand_dims(np.stack(mask_arr_list), axis=0) #[1, d, h, w]
         case_name = data_fd
 
