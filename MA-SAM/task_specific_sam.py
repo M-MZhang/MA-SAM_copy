@@ -477,14 +477,12 @@ class MaskDecoder_task(nn.Module):
                 embedding_dim=transformer_dim,
                 mlp_dim=2048,
                 num_heads=8,
+                last_transfrom = (i==0)
             )
             
             self.transformer_list.append(n_transformer)
         
-        self.u_fusion = nn.Sequential(
-            nn.Conv2d(self.num_mask_tokens, self.num_mask_tokens, kernel_size=3, padding=1, bias=False),
-            nn.Conv2d(self.num_mask_tokens, self.num_mask_tokens, kernel_size=1, bias=False)
-        )
+        
            
     
     def forward(
