@@ -477,7 +477,7 @@ class MaskDecoder_task(nn.Module):
                 embedding_dim=transformer_dim,
                 mlp_dim=2048,
                 num_heads=8,
-                last_transfrom = (i==0)
+                last_transform = (i==0)
             )
             
             self.transformer_list.append(n_transformer)
@@ -504,7 +504,7 @@ class MaskDecoder_task(nn.Module):
         )
         
         # 各通道之间进行一个融合对比
-        masks = self.u_fusion(masks)
+        # masks = self.u_fusion(masks)
 
         return masks, iou_pred
 
