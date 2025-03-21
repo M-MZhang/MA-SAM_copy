@@ -101,6 +101,11 @@ class TwoWayTransformer(nn.Module):
                 key_pe=image_pe,
             )
 
+        q = keys + image_embedding
+        attn_out = self.final_image_self_attn(q=keys, k=q, v=q)
+        keys = keys + attn_out
+        keys = self.norm_final_image_attn(keys)
+
         # Apply the final attenion layer from the points to the image
         q = queries + point_embedding
         k = keys + image_pe
@@ -108,11 +113,7 @@ class TwoWayTransformer(nn.Module):
         queries = queries + attn_out
         queries = self.norm_final_attn(queries)
         
-        q = keys + image_embedding
-        attn_out = self.final_image_self_attn(q=keys, k=q, v=q)
-        keys = keys + attn_out
-        keys = self.norm_final_image_attn(keys)
-
+        
         return queries, keys
 
 
