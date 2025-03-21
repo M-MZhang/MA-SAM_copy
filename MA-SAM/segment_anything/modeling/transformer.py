@@ -62,7 +62,9 @@ class TwoWayTransformer(nn.Module):
         self.final_image_self_attn = Attention(
             embedding_dim, num_heads, downsample_rate=attention_downsample_rate
         )
-        self.norm_final_image_attn = nn.LayerNorm(embedding_dim)
+        self.image_norm1 = nn.LayerNorm(embedding_dim)
+        self.image_mlp = MLPBlock(embedding_dim, mlp_dim, activation)
+        self.image_norm2 = nn.LayerNorm(embedding_dim)
 
     def forward(
         self,
@@ -108,10 +110,12 @@ class TwoWayTransformer(nn.Module):
         queries = queries + attn_out
         queries = self.norm_final_attn(queries)
         
-        q = keys + image_embedding
-        attn_out = self.final_image_self_attn(q=keys, k=q, v=q)
+        # image self_attn
+        attn_out = self.final_image_self_attn(q=keys, k=keys, v=keys)
         keys = keys + attn_out
-        keys = self.norm_final_image_attn(keys)
+        keys = keys + self.image_mlp(self.image_norm1(keys))
+        keys = self.image_norm2(keys)
+
 
         return queries, keys
 
