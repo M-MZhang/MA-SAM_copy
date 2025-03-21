@@ -18,8 +18,8 @@ import cv2
 import json
 
 HU_min, HU_max = 0, 255
-# data_mean = 50.21997497685108
-# data_std = 68.47153712416372
+data_mean = 50.21997497685108
+data_std = 68.47153712416372
 
 def read_image(path):
     with open(path, 'rb') as file:
@@ -384,26 +384,26 @@ class dataset_reader(Dataset):
     def __getitem__(self, idx):
         # if self.split == "train":
 
-        data = np.load(self.sample_list[idx])['image']
+        data = read_image(self.sample_list[idx])
         data = np.clip(data, HU_min, HU_max)
         
         data = np.float32(data)
         data = (data-data.min())/(data.max()-data.min()+0.00000001)
         # repeat for 3 times
-        data = np.repeat(data[:,:,None], 3, axis=-1)
+        # data = np.repeat(data[:,:,None], 3, axis=-1)
         h, w, c= data.shape
 
         data = np.float32(data) 
         
-        # mask = cv2.imread(self.sample_list[idx]['masks'],0)
-        # mask = np.float32(mask)
-        # mask = mask/255
-        mask = np.load(self.sample_list[idx])['label']
+        mask = read_image(self.sample_list[idx])
+        mask = np.float32(mask)
+        mask = mask/255
+        # mask = np.load(self.sample_list[idx])['label']
         # (512, 512) float状态的
         
         
-        # if self.num_classes==12:
-        #     mask[mask==13] = 12
+        if self.num_classes==12:
+            mask[mask==13] = 12
 
         image = np.float32(data)
         label = np.float32(mask)
@@ -414,6 +414,6 @@ class dataset_reader(Dataset):
             sample = self.transform(sample)
             sample['label'] = np.squeeze(sample['label'], axis=0)
 
-        # sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
-        sample['case_name'] = self.sample_list[idx].split('/')[-1].split('.npz')[0]
+        sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
+        # sample['case_name'] = self.sample_list[idx].split('/')[-1].split('.npz')[0]
         return sample
