@@ -109,7 +109,7 @@ class TwoWayTransformer(nn.Module):
         queries = self.norm_final_attn(queries)
         
         q = keys + image_embedding
-        attn_out = self.final_image_self_attn(q=keys, k=q, v=q)
+        attn_out = self.final_image_self_attn(q=q, k=q, v=q)
         keys = keys + attn_out
         keys = self.norm_final_image_attn(keys)
 
