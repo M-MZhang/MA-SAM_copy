@@ -17,14 +17,15 @@ import PIL.ImageDraw
 import cv2
 import json
 
-HU_min, HU_max = 0, 255
+HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
 
+
 def read_image(path):
     with open(path, 'rb') as file:
-        # img = pickle.load(file)
-        img = cv2.imread(path)
+        img = pickle.load(file)
+        # img = cv2.imread(path)
         return img
 
 def random_rot_flip(image, label):
@@ -360,7 +361,7 @@ class dataset_reader(Dataset):
         
         self.data_dir = base_dir
 
-        with open(base_dir+'/split.json', 'r') as file:
+        with open(base_dir+'/npy_new.json', 'r') as file:
             data = json.load(file)
         
         train_list = data['train']
@@ -384,23 +385,20 @@ class dataset_reader(Dataset):
     def __getitem__(self, idx):
         # if self.split == "train":
 
-        data = read_image(self.sample_list[idx])
+        data = read_image(self.sample_list[idx]['images'])
         data = np.clip(data, HU_min, HU_max)
+        data = (data-HU_min)/(HU_max-HU_min)*255.0
         
         data = np.float32(data)
+        data = (data - data_mean) / data_std
         data = (data-data.min())/(data.max()-data.min()+0.00000001)
-        # repeat for 3 times
-        # data = np.repeat(data[:,:,None], 3, axis=-1)
-        h, w, c= data.shape
+        h, w, d = data.shape
 
         data = np.float32(data) 
         
-        mask = read_image(self.sample_list[idx])
+        mask = read_image(self.sample_list[idx]['masks'])
         mask = np.float32(mask)
-        mask = mask/255
-        # mask = np.load(self.sample_list[idx])['label']
-        # (512, 512) float状态的
-        
+      
         
         if self.num_classes==12:
             mask[mask==13] = 12
@@ -413,7 +411,7 @@ class dataset_reader(Dataset):
             sample['label'] = sample['label'][:, :, np.newaxis]
             sample = self.transform(sample)
             sample['label'] = np.squeeze(sample['label'], axis=0)
+           
 
         sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
-        # sample['case_name'] = self.sample_list[idx].split('/')[-1].split('.npz')[0]
         return sample
