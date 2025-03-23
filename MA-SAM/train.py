@@ -29,7 +29,7 @@ parser.add_argument('--max_epochs', type=int,default=400, help='maximum epoch nu
 parser.add_argument('--stop_epoch', type=int, default=300, help='maximum epoch number to train')
 
 parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-parser.add_argument('--img_size', type=int, default=512, help='input patch size of network input')
+parser.add_argument('--img_size', type=int, default=224, help='input patch size of network input')
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--vit_name', type=str, default='vit_h', help='select one vit model')
 parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
