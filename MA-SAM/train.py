@@ -18,7 +18,7 @@ import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/Synapse', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/v6.7_Synapse_H_5')
+parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/v6.7_Synapse_H_10')
 parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/Synapse')
 parser.add_argument('--num_classes', type=int, default=8, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
