@@ -17,9 +17,9 @@ import os
 # os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,3,4,5,6,7"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/Synapse', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/v6.7_Synapse_H_10_224')
-parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/Synapse')
+parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/Synapse', help='root dir for data')
+parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/v6.7_Synapse_H_10_512')
+parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/Synapse')
 parser.add_argument('--num_classes', type=int, default=8, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=8, help='total gpu')
@@ -29,7 +29,7 @@ parser.add_argument('--max_epochs', type=int,default=400, help='maximum epoch nu
 parser.add_argument('--stop_epoch', type=int, default=300, help='maximum epoch number to train')
 
 parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-parser.add_argument('--img_size', type=int, default=224, help='input patch size of network input')
+parser.add_argument('--img_size', type=int, default=512, help='input patch size of network input')
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--vit_name', type=str, default='vit_h', help='select one vit model')
 parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')

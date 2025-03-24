@@ -28,27 +28,22 @@ from torchvision import transforms
 import json
 import h5py
 
-HU_min, HU_max = -200, 250
+HU_min, HU_max = -125, 275
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
 
-# os.environ['PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT'] = '1.0'
 
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
     image, label = image.squeeze(0), label.squeeze(0) #[d, h, w, 3], [d, h, w]
 
-    # new_image = []
-    # new_label = []
-    # for ind in range(image.shape[0]):
-    #     slice = image[ind]
-    z, x, y = image.shape
-    if x != patch_size[0] or y != patch_size[1]:
-        # new_image.append(zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3))
-        # new_label.append(zoom(label[ind], (patch_size[0]/x,patch_size[1]/y), order=3)) # label缩小
-        image = zoom(image, (1.0, patch_size[0] / x, patch_size[1] / y), order=3)
-        label = zoom(label, (1.0, patch_size[0] / x, patch_size[1] / y), order=0)
-    # new_label = np.array(new_label)
+    # z, x, y = image.shape
+    # if x != patch_size[0] or y != patch_size[1]:
+    #     # new_image.append(zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3))
+    #     # new_label.append(zoom(label[ind], (patch_size[0]/x,patch_size[1]/y), order=3)) # label缩小
+    #     image = zoom(image, (1.0, patch_size[0] / x, patch_size[1] / y), order=3)
+    #     label = zoom(label, (1.0, patch_size[0] / x, patch_size[1] / y), order=0)
+    # # new_label = np.array(new_label)
         
     
     probability = np.expand_dims(np.zeros_like(label, dtype=np.float32), axis=-1) #[d, h, w, 1]
@@ -58,10 +53,10 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
     avg_cnt = np.ones_like(probability, dtype=np.float32) #[d, h, w, classes+1]
     for ind in range(image.shape[0]):
         slice = image[ind]
-        # x, y = slice.shape[0], slice.shape[1]
-        # if x != patch_size[0] or y != patch_size[1]:
-        #     slice = zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3)
-        #     new_label.append(zoom(label[ind], (patch_size[0]/x,patch_size[1]/y), order=3)) # label缩小
+        # 输入需要处理
+        x, y = slice.shape[0], slice.shape[1]
+        slice = np.clip(slice, HU_min, HU_max)
+        slice = (slice - slice.min()) / (slice.max() - slice.min()+0.000000001)
         
         inputs = torch.from_numpy(slice).unsqueeze(0).float().cuda() #[c, h, w, c]
         inputs = repeat(inputs, 'c h w  ->  (repeat c) h w', repeat=3)
@@ -77,9 +72,9 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
             out_pred = torch.softmax(output_masks, dim=1)
             out_pred = torch.permute(out_pred, (0, 2, 3, 1))
             out_pred = out_pred.cpu().detach().numpy()
-            # out_h, out_w = out.shape[1], out.shape[2]
-            # if x != out_h or y != out_w:
-            #     out_pred = zoom(out_pred, (1.0, x / out_h, y / out_w, 1.0), order=3)
+            out_h, out_w = out.shape[1], out.shape[2]
+            if x != out_h or y != out_w:
+                out_pred = zoom(out_pred, (1.0, x / out_h, y / out_w, 1.0), order=3)
             
             probability[ind] += out_pred[0]
             avg_cnt[ind] += 1.
@@ -124,15 +119,13 @@ def inference(args, multimask_output, model, test_save_path=None):
     
     model.eval()
     metric_list = []
-    class_to_name = {1: 'Aorta', 2: 'Gallbladder', 3: 'Left kidney', 4: 'Right kidney', 5:'Liver', 6: 'Pancreas', 7: 'Spleen', 8: 'Stomach'}
+    class_to_name = {1: 'Spleen', 2: 'Right kidney', 3: 'Left kidney', 4: 'Gallbladder', 5:'Liver', 6: 'Stomach', 7: 'Aorta', 8: 'Pancreas'}
     for data_fd in tqdm(data_fd_list):
         file_path = args.data_path +'/test_vol_h5'+'/case'+str(data_fd)+'.npy.h5'
         with h5py.File(file_path, 'r') as f:
             image_arr_list = np.array(f['image'])
             mask_arr_list = np.array(f['label'])
-            # if image_arr_list.shape[1] != args.img_size[0] or image_arr_list.shape[2] != args.img_size[1]:
-            #     image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y, 1.0), order=3)
-            #     label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y, 1.0), order=0)
+          
         
         image = np.expand_dims(image_arr_list, axis=0) #[1, d, h, w]
         label = np.expand_dims(mask_arr_list, axis=0) #[1, d, h, w]

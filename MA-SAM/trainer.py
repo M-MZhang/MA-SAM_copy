@@ -173,15 +173,6 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     if args.use_amp:
         scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
 
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    #         optimizer, float(args.max_epochs)
-    #     )
-    
-    # if args.warmup:
-    #     scheduler = ConstantWarmupScheduler(
-    #             optimizer, scheduler, args.warmup_period,
-    #             1e-5
-    #         )
     
     writer = SummaryWriter(snapshot_path + '/log')
     iter_num = 0
@@ -193,7 +184,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    # inference(args, multimask_output, model, None)
+    inference(args, multimask_output, model, None)
     
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
