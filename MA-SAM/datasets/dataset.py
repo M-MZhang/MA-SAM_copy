@@ -17,7 +17,7 @@ import PIL.ImageDraw
 import cv2
 import json
 
-HU_min, HU_max = 0, 255
+HU_min, HU_max = -125, 275
 # data_mean = 50.21997497685108
 # data_std = 68.47153712416372
 

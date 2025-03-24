@@ -224,7 +224,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                     assert shift_iter >= 0, f'Shift iter is {shift_iter}, smaller than zero'
                 else:
                     shift_iter = iter_num
-                lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp
+                lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** 0.9 # 按照h-sam的改法，这里不是用的lr_exp,而是0.9固定值，靠谱吗？
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_
             # lr = scheduler.get_last_lr()
