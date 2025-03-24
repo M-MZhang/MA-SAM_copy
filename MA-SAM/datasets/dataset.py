@@ -397,8 +397,8 @@ class dataset_reader(Dataset):
         mask = np.float32(mask)
         mask = mask/255
         
-        if self.num_classes==12:
-            mask[mask==13] = 12
+        # if self.num_classes==12:
+        #     mask[mask==13] = 12
 
         image = np.float32(data)
         label = np.float32(mask)
