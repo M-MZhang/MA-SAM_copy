@@ -168,42 +168,42 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     iou_dict = {}
     dice_dict = {}
     model.eval()
-    for polyp in Polyp_name:
-        db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
-                                transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
-                                test_name=polyp)
+    # for polyp in Polyp_name:
+    db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
+                            transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
+                            test_name=None)
+
+    print("The length of test set is: {}".format(len(db_test)))
     
-        print("The length of test set is: {}".format(len(db_test)))
+    batch_size = args.batch_size * args.n_gpu
+    def worker_init_fn(worker_id):
+        random.seed(args.seed + worker_id)
+
+    testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+                            worker_init_fn=worker_init_fn, drop_last=False)
+
+    iou = 0
+    dice = 0
+    num_test = 0
+    for i_batch, sampled_batch in enumerate(testdataloader):
+        # print(i_batch)
+        image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
+        hw_size = image_batch.shape[-1]
+        label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
+
+        image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
         
-        batch_size = args.batch_size * args.n_gpu
-        def worker_init_fn(worker_id):
-            random.seed(args.seed + worker_id)
-
-        testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
-                                worker_init_fn=worker_init_fn, drop_last=False)
-
-        iou = 0
-        dice = 0
-        num_test = 0
-        for i_batch, sampled_batch in enumerate(testdataloader):
-            # print(i_batch)
-            image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
-            hw_size = image_batch.shape[-1]
-            label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
-
-            image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
+        with torch.no_grad():
+            outputs = model(image_batch, multimask_output, args.img_size)
+            low_res_logits = outputs['low_res_logits']
             
-            with torch.no_grad():
-                outputs = model(image_batch, multimask_output, args.img_size)
-                low_res_logits = outputs['low_res_logits']
-                
-                out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
-                out = out.cpu().detach().numpy()
-                label_batch = label_batch.cpu().detach().numpy()
-                iou += iou_loss(out, label_batch) * image_batch.shape[0]
-                dice += calculate_metric_percase(out, label_batch) * image_batch.shape[0]
+            out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+            out = out.cpu().detach().numpy()
+            label_batch = label_batch.cpu().detach().numpy()
+            iou += iou_loss(out, label_batch) * image_batch.shape[0]
+            dice += calculate_metric_percase(out, label_batch) * image_batch.shape[0]
 
-                num_test += image_batch.shape[0]
+            num_test += image_batch.shape[0]
         
 
     iou = iou / num_test
