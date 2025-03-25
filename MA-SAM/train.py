@@ -21,7 +21,7 @@ parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/isic2018'
 parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/v6.7_isic2018_B_5')
 parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/isic2018')
 parser.add_argument('--num_classes', type=int, default=1, help='output channel of network')
-parser.add_argument('--batch_size', type=int, default=64, help='batch_size per gpu')
+parser.add_argument('--batch_size', type=int, default=56, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=4, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0012, help='segmentation network learning rate')
 
