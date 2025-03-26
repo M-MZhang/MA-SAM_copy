@@ -167,7 +167,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     else:
         b_lr = base_lr
     if args.AdamW:
-        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.01)
+        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.1)
     else:
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
     if args.use_amp:
@@ -215,7 +215,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                     assert shift_iter >= 0, f'Shift iter is {shift_iter}, smaller than zero'
                 else:
                     shift_iter = iter_num
-                lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** 0.9 # 按照h-sam的改法，这里不是用的lr_exp,而是0.9固定值，靠谱吗？
+                lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp # 按照h-sam的改法，这里不是用的lr_exp,而是0.9固定值，靠谱吗？
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_
             # lr = scheduler.get_last_lr()
