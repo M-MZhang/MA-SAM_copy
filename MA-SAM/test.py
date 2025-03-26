@@ -161,7 +161,7 @@ def inference(args, multimask_output, model, test_save_path=None):
     return 1
 
 def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
-    Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
+    Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'Kvasir', 'CVC-ColonDB', 'ETIS-LaribPolypDB']
     # Polyp_name = ['CVC-300']
     iou_loss = IoU(reduction='mean')
   
