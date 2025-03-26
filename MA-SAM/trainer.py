@@ -127,7 +127,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=24, pin_memory=True,
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
                              worker_init_fn=worker_init_fn, drop_last=False) # 这个drop_last好像会有点什么问题？
     
     num = 0
@@ -193,7 +193,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    inference_2d(args, multimask_output, model,  low_res, None)
+    # inference_2d(args, multimask_output, model,  low_res, None)
 
     
     for epoch_num in iterator:
@@ -225,8 +225,8 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                     assert shift_iter >= 0, f'Shift iter is {shift_iter}, smaller than zero'
                 else:
                     shift_iter = iter_num
-                # lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp
-                lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** 0.9
+                lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp
+                # lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** 0.9
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_
             # lr = scheduler.get_last_lr()
