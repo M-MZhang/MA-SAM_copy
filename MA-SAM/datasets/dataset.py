@@ -385,10 +385,10 @@ class dataset_reader(Dataset):
         # if self.split == "train":
 
         data = np.load(self.sample_list[idx])['image']
-        data = np.clip(data, HU_min, HU_max)
+        # data = np.clip(data, HU_min, HU_max)
         
-        data = np.float32(data)
-        data = (data-data.min())/(data.max()-data.min()+0.00000001)
+        # data = np.float32(data)
+        # data = (data-data.min())/(data.max()-data.min()+0.00000001)
         # repeat for 3 times
         data = np.repeat(data[:,:,None], 3, axis=-1)
         h, w, c= data.shape

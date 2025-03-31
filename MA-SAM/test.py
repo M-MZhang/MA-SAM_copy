@@ -55,8 +55,8 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
         slice = image[ind]
         # 输入需要处理
         x, y = slice.shape[0], slice.shape[1]
-        slice = np.clip(slice, HU_min, HU_max)
-        slice = (slice - slice.min()) / (slice.max() - slice.min()+0.000000001)
+        # slice = np.clip(slice, HU_min, HU_max)
+        # slice = (slice - slice.min()) / (slice.max() - slice.min()+0.000000001)
         
         inputs = torch.from_numpy(slice).unsqueeze(0).float().cuda() #[c, h, w, c]
         inputs = repeat(inputs, 'c h w  ->  (repeat c) h w', repeat=3)

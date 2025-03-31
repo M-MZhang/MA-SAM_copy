@@ -14,16 +14,17 @@ from segment_anything import sam_model_registry
 from trainer import trainer_run
 from icecream import ic
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,4,5,6,7"
+# os.environ["CUDA_VISIBLE_DEVICES"]="0,1,2,4,5,6,7"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/Synapse', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/v6.7_Synapse_H_10_512_lrexp2')
-parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/Synapse')
+parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/Synapse', help='root dir for data')
+parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/v6.7_Synapse_H_10_ngpu4')
+parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/Synapse')
 parser.add_argument('--num_classes', type=int, default=8, help='output channel of network')
-parser.add_argument('--batch_size', type=int, default=7, help='batch_size per gpu')
-parser.add_argument('--n_gpu', type=int, default=7, help='total gpu')
+parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
+parser.add_argument('--n_gpu', type=int, default=4, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0012, help='segmentation network learning rate')
+parser.add_argument('--weight_decay', type=float, default=0.01, help='data loader threads')
 
 parser.add_argument('--max_epochs', type=int,default=400, help='maximum epoch number to train')
 parser.add_argument('--stop_epoch', type=int, default=300, help='maximum epoch number to train')
@@ -32,7 +33,7 @@ parser.add_argument('--deterministic', type=int, default=1, help='whether use de
 parser.add_argument('--img_size', type=int, default=512, help='input patch size of network input')
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--vit_name', type=str, default='vit_h', help='select one vit model')
-parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
+parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
 parser.add_argument('--adapt_ckpt', type=str, default=None, help='Finetuned checkpoint')
 parser.add_argument('--rank', type=int, default=32, help='Rank for FacT')
 parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')
@@ -41,7 +42,7 @@ parser.add_argument('--warmup_period', type=int, default=250, help='Warp up iter
 parser.add_argument('--AdamW', action='store_true', help='If activated, use AdamW to finetune SAM model')
 parser.add_argument('--module', type=str, default='task_specific_sam')
 parser.add_argument('--dice_param', type=float, default=0.8)
-parser.add_argument('--lr_exp', type=float, default=2, help='The learning rate decay expotential')
+parser.add_argument('--lr_exp', type=float, default=5, help='The learning rate decay expotential')
 
 # acceleration choices
 parser.add_argument('--tf32', action='store_true', help='If activated, use tf32 to accelerate the training process')
