@@ -12,7 +12,8 @@ import torch.backends.cudnn as cudnn
 from importlib import import_module
 from segment_anything import sam_model_registry
 from torch.nn.modules.loss import CrossEntropyLoss
-from utils import DiceLoss
+from utils import DiceLoss, BinaryDiceLoss
+from PIL import Image
 
 from icecream import ic
 import pandas as pd
@@ -164,6 +165,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
     # Polyp_name = ['CVC-300']
     iou_loss = IoU(reduction='mean')
+    dice_loss = BinaryDiceLoss()
   
     iou_dict = {}
     dice_dict = {}
@@ -175,7 +177,8 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
 
     print("The length of test set is: {}".format(len(db_test)))
     
-    batch_size = args.batch_size * args.n_gpu
+    # batch_size = args.batch_size * args.n_gpu
+    batch_size = 1
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
@@ -197,13 +200,28 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
             outputs = model(image_batch, multimask_output, args.img_size)
             low_res_logits = outputs['low_res_logits']
             
-            out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
-            out = out.cpu().detach().numpy()
-            label_batch = label_batch.cpu().detach().numpy()
+            # out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+            # out = torch.sigmoid(low_res_logits.squeeze(1))
+            out = low_res_logits.squeeze(1)
+            vis_out = torch.sigmoid(out)
+            # out = out.cpu().detach().numpy()
+            # out[out>0]=1 #转化为2值
+            # label_batch = label_batch.cpu().detach().numpy()
+            
             iou += iou_loss(out, label_batch) * image_batch.shape[0]
-            dice += calculate_metric_percase(out, label_batch) * image_batch.shape[0]
-
+            dice += (1-dice_loss(out, label_batch)) * image_batch.shape[0]
             num_test += image_batch.shape[0]
+
+            #可视化一下
+            vis_out = vis_out.cpu().detach().numpy()
+            # out = torch.sigmoid(out)
+            label_batch = label_batch.cpu().detach().numpy()
+            img = Image.fromarray(np.array(vis_out*255).squeeze().astype(np.uint8))
+            img.save('/root/data1/zmm/seg4medicine/trash/'+str(i_batch)+'.jpg')
+            label = Image.fromarray(np.array(label_batch*255).squeeze().astype(np.uint8))
+            label.save('/root/data1/zmm/seg4medicine/trash/'+str(i_batch)+'_label.jpg')
+
+            
         
 
     iou = iou / num_test

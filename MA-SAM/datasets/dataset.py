@@ -326,14 +326,14 @@ class RandomGenerator(object):
         if random.random() > 0.5:
             image, label = random_erasing(imgs=image, label=label, rng=self.rng)
         
-        inds = self.rng.choice(len(self.ops), size=self.n, replace=False)
-        for i in inds:
-            op = self.ops[i]
-            aug_func = op[0]
-            aug_params = op[1]
-            v = self.rng.uniform(aug_params[0], aug_params[1])
+        # inds = self.rng.choice(len(self.ops), size=self.n, replace=False)
+        # for i in inds:
+        #     op = self.ops[i]
+        #     aug_func = op[0]
+        #     aug_params = op[1]
+        #     v = self.rng.uniform(aug_params[0], aug_params[1])
 
-            image, label = aug_func(image, label, v)
+        #     image, label = aug_func(image, label, v)
 
         x, y, z = image.shape
         if x != self.output_size[0] or y != self.output_size[1]:
@@ -384,24 +384,25 @@ class dataset_reader(Dataset):
     def __getitem__(self, idx):
         # if self.split == "train":
 
-        data = read_image(self.sample_list[idx]['images'])
-        data = np.clip(data, HU_min, HU_max)
+        data = PIL.Image.open(self.sample_list[idx]['images'])
+        # data = np.clip(data, HU_min, HU_max)
         
-        data = np.float32(data)
-        data = (data-data.min())/(data.max()-data.min()+0.00000001)
+   
+        data = ((data-np.min(data)) / (np.max(data)-np.min(data))) 
         h, w, c= data.shape
 
         data = np.float32(data) #降到只有一维
         
-        mask = cv2.imread(self.sample_list[idx]['masks'],0)
-        mask = np.float32(mask)
-        mask = mask/255
+        mask = PIL.Image.open(self.sample_list[idx]['masks'])
+        mask = np.array(mask)/255
         
         # if self.num_classes==12:
         #     mask[mask==13] = 12
 
         image = np.float32(data)
         label = np.float32(mask)
+
+    
 
         sample = {'image': image, 'label': label}
         if self.transform:

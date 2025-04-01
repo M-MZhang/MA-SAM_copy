@@ -45,9 +45,11 @@ class DiceLoss(nn.Module):
     def forward(self, inputs, target, weight=None, softmax=False):
         if softmax:
             inputs = torch.softmax(inputs, dim=1)
-        target = self._one_hot_encoder(target)
+        if self.n_classes > 1:
+            target = self._one_hot_encoder(target)
         if weight is None:
             weight = [1] * self.n_classes
+            # weight = [0.5,1.5]
         assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(),
                                                                                                   target.size())
         class_wise_dice = []
@@ -57,6 +59,76 @@ class DiceLoss(nn.Module):
             class_wise_dice.append(1.0 - dice.item())
             loss += dice * weight[i]
         return loss / self.n_classes
+
+class BinaryDiceLoss(nn.Module):
+    def __init__(self, smooth=1e-6):
+        super(BinaryDiceLoss, self).__init__()
+        self.smooth = smooth  # 平滑项，防止除零
+
+    def forward(self, y_pred, y_true):
+        # y_pred: 模型输出的概率 [N, H, W]（未经过sigmoid）
+        # y_true: 真实标签 [N, H, W]，值为0或1
+        y_pred = torch.sigmoid(y_pred)  # 转换为概率 [0,1]
+        if (math.nan in y_pred) or (math.inf in y_pred):
+            print("Erro!")
+        
+        # 展平张量
+        y_pred_flat = y_pred.view(-1)
+        y_true_flat = y_true.view(-1)
+        
+        # 计算交集和并集
+        intersection = (y_pred_flat * y_true_flat).sum()
+        union = y_pred_flat.sum() + y_true_flat.sum()
+        
+        # Dice Loss
+        dice = (2. * intersection + self.smooth) / (union + self.smooth)
+        return 1 - dice
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
+        
+        # 计算概率 p_t
+        pt = torch.exp(-bce_loss)  # p_t = sigmoid(logit) for y=1, 1-sigmoid(logit) for y=0
+        focal_loss = self.alpha * (1 - pt) ** self.gamma * bce_loss
+
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss
+
+class MultiClassFocalLoss(nn.Module):   
+    def __init__(self, alpha=None, gamma=2, reduction='mean'):
+        super(MultiClassFocalLoss, self).__init__()
+        self.alpha = alpha  # 可传入类别权重列表（如 [0.1, 0.9]）
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-ce_loss)  # 计算 p_t = softmax(output)[target_class]
+        
+        if self.alpha is not None:
+            alpha = self.alpha[targets]  # 按 target 选择 alpha
+            fl_loss = alpha * (1 - pt) ** self.gamma * ce_loss
+        else:
+            fl_loss = (1 - pt) ** self.gamma * ce_loss
+            
+        if self.reduction == 'mean':
+            return fl_loss.mean()
+        elif self.reduction == 'sum':
+            return fl_loss.sum()
+        else:
+            return fl_loss
 
 def mkdir_if_missing(dirname):
     """Create dirname if it is missing."""
@@ -81,8 +153,8 @@ def write_json(obj, fpath):
         json.dump(obj, f, indent=4, separators=(",", ": "))
 
 def calculate_metric_percase(pred, gt):
-    pred[pred > 0] = 1
-    gt[gt > 0] = 1
+    # pred[pred > 0] = 1
+    # gt[gt > 0] = 1
     if pred.sum() > 0 and gt.sum() > 0:
         dice = metric.binary.dc(pred, gt)
         return dice

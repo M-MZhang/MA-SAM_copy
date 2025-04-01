@@ -14,7 +14,7 @@ from torch.nn.modules.loss import CrossEntropyLoss
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from tqdm import tqdm
-from utils import DiceLoss
+from utils import DiceLoss, FocalLoss, MultiClassFocalLoss, BinaryDiceLoss
 from torchvision import transforms
 from icecream import ic
 from datetime import datetime
@@ -23,12 +23,14 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
 
-def calc_loss(outputs, low_res_label_batch, ce_loss, dice_loss, dice_weight:float=0.8):
-    low_res_logits = outputs['low_res_logits']
-    loss_ce = ce_loss(low_res_logits, low_res_label_batch[:].long())
-    loss_dice = dice_loss(low_res_logits, low_res_label_batch, softmax=True)
-    loss = (1 - dice_weight) * loss_ce + dice_weight * loss_dice
-    return loss, loss_ce, loss_dice
+def calc_loss(outputs, low_res_label_batch, ce_loss, focal_loss, dice_loss, dice_weight:float=0.8):
+    low_res_logits = outputs['low_res_logits'].squeeze(1) #现在只有1张了
+    # loss_ce = ce_loss(low_res_logits, low_res_label_batch[:].long())
+    loss_focal = focal_loss(low_res_logits, low_res_label_batch[:].float())
+    # loss_dice = dice_loss(low_res_logits, low_res_label_batch, softmax=True)
+    loss_dice = dice_loss(low_res_logits, low_res_label_batch)
+    loss = (1 - dice_weight) * loss_focal + dice_weight * loss_dice
+    return loss, loss_focal, loss_dice
 
 
 class _BaseWarmupScheduler(_LRScheduler):
@@ -161,13 +163,15 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         model = nn.DataParallel(model)
     model.train()
     ce_loss = CrossEntropyLoss(ignore_index=-100)
-    dice_loss = DiceLoss(num_classes + 1)
+    focal_loss = FocalLoss(alpha=0.75)
+    dice_loss = BinaryDiceLoss()
     if args.warmup:
         b_lr = base_lr / args.warmup_period
     else:
         b_lr = base_lr
     if args.AdamW:
-        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.1)
+        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=args.weight_decay)
+        # optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr,weight_decay=args.weight_decay)
     else:
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
     if args.use_amp:
@@ -193,7 +197,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    # inference_2d(args, multimask_output, model,  low_res, None)
+    inference_2d(args, multimask_output, model,  low_res, None)
 
     
     for epoch_num in iterator:
@@ -209,7 +213,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             if args.use_amp:
                 with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=args.use_amp):
                     outputs = model(image_batch, multimask_output, args.img_size)
-                    loss, loss_ce, loss_dice = calc_loss(outputs, label_batch, ce_loss, dice_loss, args.dice_param)
+                    loss, loss_focal, loss_dice = calc_loss(outputs, label_batch, ce_loss, focal_loss, dice_loss, args.dice_param)
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
@@ -233,10 +237,10 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             iter_num = iter_num + 1
             writer.add_scalar('info/lr',lr_ , iter_num)
             writer.add_scalar('info/total_loss', loss, iter_num)
-            writer.add_scalar('info/loss_ce', loss_ce, iter_num)
+            writer.add_scalar('info/loss_ce', loss_focal, iter_num)
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
 
-            logging.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f, lr: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item(),lr_))
+            logging.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f, lr: %f' % (iter_num, loss.item(), loss_focal.item(), loss_dice.item(),lr_))
 
         save_interval = 10
         if (epoch_num + 1) % save_interval == 0:

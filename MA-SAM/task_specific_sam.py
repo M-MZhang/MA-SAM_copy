@@ -213,8 +213,8 @@ class ImageEncoderViT_task(nn.Module):
                 outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
-                # if i == 0:
-                #     outputs.append(x)
+                if i == 0:
+                    outputs.append(x)
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
@@ -481,6 +481,14 @@ class MaskDecoder_task(nn.Module):
                 final_trans=(i==0)
             )
             self.transformer_list.append(n_transformer)
+        
+        self.last_transformer = TwoWayTransformer(
+                depth=2,
+                embedding_dim=transformer_dim,
+                mlp_dim=2048,
+                num_heads=8,
+                final_trans=(i==0)
+        )
             
             # self.transformer_list.append(copy.deepcopy(MaskDecoder.transformer))
         
@@ -519,6 +527,9 @@ class MaskDecoder_task(nn.Module):
         # Concatenate output tokens (number of mask_tokens remains to 1)
         output_tokens = torch.cat([self.iou_tokens.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
+
+        original_embedding = image_embeddings[0]
+        image_embeddings = image_embeddings[1:]
         
         # Run the transforme
         for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
@@ -539,6 +550,11 @@ class MaskDecoder_task(nn.Module):
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1) 
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
+        
+        # #增补第一层的细节？
+        # hs = hs[:, :-self.num_mask_tokens, :]
+        # src = src + original_embedding.flatten(2).permute(0, 2, 1) + src0
+        # hs, src = self.last_transformer(src, pos_src, hs)
         
         
         iou_token_out = hs[:, 0, :]
@@ -658,7 +674,7 @@ class Sam_task(nn.Module):
         
         # self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         
         self.task_specific_embed_list = nn.ParameterList()
 
