@@ -384,7 +384,7 @@ class dataset_reader(Dataset):
     def __getitem__(self, idx):
         # if self.split == "train":
 
-        data = PIL.Image.open(self.sample_list[idx]['images'])
+        data = cv2.imread(self.sample_list[idx]['images'])
         # data = np.clip(data, HU_min, HU_max)
         
    
@@ -393,7 +393,7 @@ class dataset_reader(Dataset):
 
         data = np.float32(data) #降到只有一维
         
-        mask = PIL.Image.open(self.sample_list[idx]['masks'])
+        mask = cv2.imread(self.sample_list[idx]['masks'],0)
         mask = np.array(mask)/255
         
         # if self.num_classes==12:
