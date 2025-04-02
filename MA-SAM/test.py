@@ -21,7 +21,7 @@ import pickle
 from datetime import datetime
 from einops import repeat
 from scipy.ndimage import zoom
-from utils import calculate_metric_percase, write_json, IoU
+from utils import calculate_metric_percase, write_json, HD_Score
 import nibabel as nib
 
 from datasets.dataset import dataset_reader, RandomGenerator
@@ -32,7 +32,7 @@ HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
 
-# os.environ['PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT'] = '1.0'
+
 
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
@@ -162,15 +162,10 @@ def inference(args, multimask_output, model, test_save_path=None):
     return 1
 
 def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
-    Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
-    # Polyp_name = ['CVC-300']
-    iou_loss = IoU(reduction='mean')
-    dice_loss = DiceLoss(n_classes=args.num_classes+1)
+
+    hd_score = HD_Score(n_classes=args.num_classes+1)
   
-    iou_dict = {}
-    dice_dict = {}
     model.eval()
-    # for polyp in Polyp_name:
     db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
                             transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
                             test_name=None)
@@ -185,11 +180,11 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                             worker_init_fn=worker_init_fn, drop_last=False)
 
-    iou = 0
+    hd = 0
     dice = 0
     num_test = 0
     for i_batch, sampled_batch in enumerate(testdataloader):
-        # print(i_batch)
+       
         image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
         hw_size = image_batch.shape[-1]
         label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
@@ -199,42 +194,31 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
         with torch.no_grad():
             outputs = model(image_batch, multimask_output, args.img_size)
             low_res_logits = outputs['low_res_logits']
-            
-            out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
-            out = out.cpu().detach().numpy()
-            label_batch = label_batch.cpu().detach().numpy()
 
             
+            
+            out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+            hd += hd_score(out, label_batch)
+            out = out.cpu().detach().numpy()
+            label_batch = label_batch.cpu().detach().numpy()
             dice += calculate_metric_percase(out, label_batch) * label_batch.shape[0]
             
-            # iou += iou_loss(low_res_logits, label_batch) * image_batch.shape[0]
-            iou += 0
-            # dice += (1-dice_loss(low_res_logits, label_batch, softmax=True)) * image_batch.shape[0]
+            
             num_test += image_batch.shape[0]
 
             #可视化一下
-            # vis_out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
-            # vis_out = vis_out.cpu().detach().numpy()
-            # out = torch.sigmoid(out)
-            # label_batch = label_batch.cpu().detach().numpy()
             img = Image.fromarray(np.array(out*255).squeeze().astype(np.uint8))
-            img.save('/root/data1/zmm/seg4medicine/trash/'+str(i_batch)+'.jpg')
+            img.save('/root/data1/zmm/seg4medicine/visulization/STARE/'+str(i_batch)+'.jpg')
             label = Image.fromarray(np.array(label_batch*255).squeeze().astype(np.uint8))
-            label.save('/root/data1/zmm/seg4medicine/trash/'+str(i_batch)+'_label.jpg')
+            label.save('/root/data1/zmm/seg4medicine/visulization/STARE/'+str(i_batch)+'_label.jpg')
 
             
-        
-
-    iou = iou / num_test
+    hd = hd.item() / num_test
     dice = dice / num_test
+
+    logging.info("DICE:{}, HD:{}".format(dice, hd))
     
-        # iou_dict[polyp] = iou
-        # dice_dict[polyp] = dice
-        # print("{}: DICE:{}, IoU:{}".format(polyp, dice, iou))
-    # print("DICE:{}, IoU:{}".format(dice, iou))s
-    logging.info("DICE:{}, IoU:{}".format(dice, iou))
-    
-    loss = {'DICE':dice, 'IoU': iou}
+    loss = {'DICE':dice, 'HD': hd}
     if test_save_path is not None:
         write_json(loss, test_save_path+'/result.json')
     print("Finish test haha!")
@@ -253,19 +237,19 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/v6.7_isic2018_B_2/epoch_79.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/isic2018')
-    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/v6.7_isic2018_B_2')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/DRIVE_2/epoch_149.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/STARE')
+    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/STARE')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
-    parser.add_argument('--batch_size', type=int, default=32, help='batch_size per gpu')
-    parser.add_argument('--n_gpu', type=int, default=2, help='total gpu')   
+    parser.add_argument('--batch_size', type=int, default=4, help='batch_size per gpu')
+    parser.add_argument('--n_gpu', type=int, default=1, help='total gpu')   
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-    parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_b_01ec64.pth', help='Pretrained checkpoint')
-    parser.add_argument('--vit_name', type=str, default='vit_b', help='Select one vit model')
+    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
+    parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
     parser.add_argument('--module', type=str, default='task_specific_sam')
