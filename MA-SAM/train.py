@@ -18,7 +18,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/DRIVE', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/DRIVE')
+parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/DRIVE_2')
 parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/DRIVE')
 parser.add_argument('--num_classes', type=int, default=1, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=4, help='batch_size per gpu')
@@ -42,7 +42,7 @@ parser.add_argument('--warmup_period', type=int, default=50, help='Warp up itera
 parser.add_argument('--AdamW', action='store_true', help='If activated, use AdamW to finetune SAM model')
 parser.add_argument('--module', type=str, default='task_specific_sam')
 parser.add_argument('--dice_param', type=float, default=0.8)
-parser.add_argument('--lr_exp', type=float, default=0.98, help='The learning rate decay expotential')
+parser.add_argument('--lr_exp', type=float, default=2, help='The learning rate decay expotential')
 
 # acceleration choices
 parser.add_argument('--tf32', action='store_true', help='If activated, use tf32 to accelerate the training process')

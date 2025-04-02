@@ -213,8 +213,8 @@ class ImageEncoderViT_task(nn.Module):
                 outputs.append(x)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
-                if i == 0:
-                    outputs.append(x)
+                # if i == 0:
+                #     outputs.append(x)
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
@@ -528,8 +528,8 @@ class MaskDecoder_task(nn.Module):
         output_tokens = torch.cat([self.iou_tokens.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
 
-        original_embedding = image_embeddings[0]
-        image_embeddings = image_embeddings[1:]
+        # original_embedding = image_embeddings[0]
+        # image_embeddings = image_embeddings[1:]
         
         # Run the transforme
         for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
@@ -674,7 +674,7 @@ class Sam_task(nn.Module):
         
         # self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num+1)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
 

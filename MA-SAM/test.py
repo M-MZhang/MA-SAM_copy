@@ -165,7 +165,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     Polyp_name = ['CVC-300', 'CVC-ClinicDB', 'CVC-ColonDB', 'ETIS-LaribPolypDB', 'Kvasir']
     # Polyp_name = ['CVC-300']
     iou_loss = IoU(reduction='mean')
-    dice_loss = BinaryDiceLoss()
+    dice_loss = DiceLoss(n_classes=args.num_classes+1)
   
     iou_dict = {}
     dice_dict = {}
@@ -200,23 +200,24 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
             outputs = model(image_batch, multimask_output, args.img_size)
             low_res_logits = outputs['low_res_logits']
             
-            # out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
-            # out = torch.sigmoid(low_res_logits.squeeze(1))
-            out = low_res_logits.squeeze(1)
-            vis_out = torch.sigmoid(out)
-            # out = out.cpu().detach().numpy()
-            # out[out>0]=1 #转化为2值
-            # label_batch = label_batch.cpu().detach().numpy()
+            out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+            out = out.cpu().detach().numpy()
+            label_batch = label_batch.cpu().detach().numpy()
+
             
-            iou += iou_loss(out, label_batch) * image_batch.shape[0]
-            dice += (1-dice_loss(out, label_batch)) * image_batch.shape[0]
+            dice += calculate_metric_percase(out, label_batch) * label_batch.shape[0]
+            
+            # iou += iou_loss(low_res_logits, label_batch) * image_batch.shape[0]
+            iou += 0
+            # dice += (1-dice_loss(low_res_logits, label_batch, softmax=True)) * image_batch.shape[0]
             num_test += image_batch.shape[0]
 
             #可视化一下
-            vis_out = vis_out.cpu().detach().numpy()
+            # vis_out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+            # vis_out = vis_out.cpu().detach().numpy()
             # out = torch.sigmoid(out)
-            label_batch = label_batch.cpu().detach().numpy()
-            img = Image.fromarray(np.array(vis_out*255).squeeze().astype(np.uint8))
+            # label_batch = label_batch.cpu().detach().numpy()
+            img = Image.fromarray(np.array(out*255).squeeze().astype(np.uint8))
             img.save('/root/data1/zmm/seg4medicine/trash/'+str(i_batch)+'.jpg')
             label = Image.fromarray(np.array(label_batch*255).squeeze().astype(np.uint8))
             label.save('/root/data1/zmm/seg4medicine/trash/'+str(i_batch)+'_label.jpg')
