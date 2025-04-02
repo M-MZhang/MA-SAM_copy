@@ -14,7 +14,7 @@ from segment_anything import sam_model_registry
 from trainer import trainer_run
 from icecream import ic
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+# os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/DRIVE', help='root dir for data')
