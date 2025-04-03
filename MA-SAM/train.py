@@ -14,6 +14,7 @@ from segment_anything import sam_model_registry
 from trainer import trainer_run
 from icecream import ic
 import os
+
 os.environ["CUDA_VISIBLE_DEVICES"]="4,5,6,7"
 
 parser = argparse.ArgumentParser()
