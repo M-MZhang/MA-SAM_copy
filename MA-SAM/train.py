@@ -15,15 +15,15 @@ from trainer import trainer_run
 from icecream import ic
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"]="4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"]="1,2,3"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/CVC-ClinicDB', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/CVC-ClinicDB')
-parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/CVC-ClinicDB')
+parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/isic2018', help='root dir for data')
+parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/isic2018_H')
+parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/isic2018')
 parser.add_argument('--num_classes', type=int, default=1, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu')
-parser.add_argument('--n_gpu', type=int, default=4, help='total gpu')
+parser.add_argument('--n_gpu', type=int, default=3, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0008, help='segmentation network learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.01, help='weight decay')
 
