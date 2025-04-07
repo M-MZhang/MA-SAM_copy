@@ -20,6 +20,8 @@ from icecream import ic
 from datetime import datetime
 from test import inference, inference_2d
 from torch.optim.lr_scheduler import _LRScheduler
+from mindspore.nn.metrics import HausdorffDistance
+
 
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
 

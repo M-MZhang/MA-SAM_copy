@@ -18,10 +18,10 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/UDIAT', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/UDIAT')
-parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/visualization/UDIAT')
-parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/UDIAT')
+parser.add_argument('--root_path', type=str, default='/root/data1/zmm/seg4medicine/data/dsb-2018', help='root dir for data')
+parser.add_argument('--output', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/dsb-2018')
+parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/visualization/dsb-2018')
+parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/dsb-2018')
 parser.add_argument('--num_classes', type=int, default=1, help='output channel of network')
 parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=2, help='total gpu')

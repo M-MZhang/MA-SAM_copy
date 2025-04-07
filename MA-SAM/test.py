@@ -28,6 +28,8 @@ from datasets.dataset import dataset_reader, RandomGenerator
 from torchvision import transforms
 import json
 
+# from mindspore.nn.metrics import HausdorffDistance
+
 HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
@@ -164,6 +166,7 @@ def inference(args, multimask_output, model, test_save_path=None):
 def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
 
     hd_score = HD_Score(n_classes=args.num_classes+1)
+    # hd_metric = HausdorffDistance()
   
     model.eval()
     db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
@@ -183,6 +186,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     hd = 0
     dice = 0
     num_test = 0
+    h_num = 0
     for i_batch, sampled_batch in enumerate(testdataloader):
        
         image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
@@ -196,6 +200,10 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
             low_res_logits = outputs['low_res_logits']
             
             out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+            h = hd_score(out, label_batch)
+            if h !=0 :
+                hd += h
+                h_num += image_batch.shape[0]
             hd += hd_score(out, label_batch)
             out = out.cpu().detach().numpy()
             label_batch = label_batch.cpu().detach().numpy()
@@ -210,7 +218,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
                 label.save(os.path.join(args.visual_path,str(i_batch)+'_label.png'))
 
             
-    hd = hd.item() / num_test
+    hd = hd.item() / h_num
     dice = dice / num_test
 
     logging.info("DICE:{}, HD:{}".format(dice, hd))
