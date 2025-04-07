@@ -172,8 +172,8 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
 
     print("The length of test set is: {}".format(len(db_test)))
     
-    # batch_size = args.batch_size * args.n_gpu
-    batch_size = 1
+    batch_size = args.batch_size * args.n_gpu
+    # batch_size = 1
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
@@ -194,16 +194,12 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
         with torch.no_grad():
             outputs = model(image_batch, multimask_output, args.img_size)
             low_res_logits = outputs['low_res_logits']
-
-            
             
             out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
             hd += hd_score(out, label_batch)
             out = out.cpu().detach().numpy()
             label_batch = label_batch.cpu().detach().numpy()
             dice += calculate_metric_percase(out, label_batch) * label_batch.shape[0]
-            
-            
             num_test += image_batch.shape[0]
 
             #可视化一下
@@ -238,13 +234,14 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/DRIVE_2/epoch_149.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/STARE')
-    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/STARE')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/UDIAT/epoch_169.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BUSI')
+    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/BUSI')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=4, help='batch_size per gpu')
-    parser.add_argument('--n_gpu', type=int, default=1, help='total gpu')   
+    parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
+    parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/visualization/BUSI')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')

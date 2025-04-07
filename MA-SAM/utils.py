@@ -31,14 +31,14 @@ class HD_Score(nn.Module):
         self.hd = compute_hausdorff_distance
         self.n_classes = n_classes
     
-    # def _one_hot_encoder(self, input_tensor):
-    #     tensor_list = []
-    #     for i in range(self.n_classes):
-    #         temp_prob = 1.0*(input_tensor == i)  # * torch.ones_like(input_tensor)
-    #         temp_prob[input_tensor == -100] = -100
-    #         tensor_list.append(temp_prob.unsqueeze(1))
-    #     output_tensor = torch.cat(tensor_list, dim=1)
-    #     return output_tensor.float()
+    def _one_hot_encoder(self, input_tensor):
+        tensor_list = []
+        for i in range(self.n_classes):
+            temp_prob = 1.0*(input_tensor == i)  # * torch.ones_like(input_tensor)
+            temp_prob[input_tensor == -100] = -100
+            tensor_list.append(temp_prob.unsqueeze(1))
+        output_tensor = torch.cat(tensor_list, dim=1)
+        return output_tensor.float()
     
     def forward(self, inputs, target, softmax=False):
         # if self.n_classes > 1:
@@ -47,6 +47,7 @@ class HD_Score(nn.Module):
         #     inputs = torch.softmax(inputs, dim=1)
         assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(),
                                                                                                   target.size())
+        inputs = inputs + 1e-7
         hd = self.hd(inputs.unsqueeze(1), target.unsqueeze(1))
      
         return hd
