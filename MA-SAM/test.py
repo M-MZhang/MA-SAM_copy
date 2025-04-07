@@ -209,9 +209,9 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
             #可视化一下
             if i_batch <10 :
                 img = Image.fromarray(np.array(out[0]*255).squeeze().astype(np.uint8))
-                img.save('/root/data1/zmm/seg4medicine/visulization/UDIAT/'+str(i_batch)+'.png')
+                img.save(os.path.join(args.visual_path, str(i_batch)+'.png'))
                 label = Image.fromarray(np.array(label_batch[0]*255).squeeze().astype(np.uint8))
-                label.save('/root/data1/zmm/seg4medicine/visulization/UDIAT/'+str(i_batch)+'_label.png')
+                label.save(os.path.join(args.visual_path,str(i_batch)+'_label.png'))
 
             
     hd = hd.item() / num_test
