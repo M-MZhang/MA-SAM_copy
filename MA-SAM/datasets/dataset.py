@@ -387,7 +387,6 @@ class dataset_reader(Dataset):
         data = cv2.imread(self.sample_list[idx]['images'])
         # data = np.clip(data, HU_min, HU_max)
         
-   
         data = ((data-np.min(data)) / (np.max(data)-np.min(data))) 
         h, w, c= data.shape
 

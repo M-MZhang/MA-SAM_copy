@@ -241,14 +241,14 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/isic2018_H/epoch_99.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/isic2018')
-    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/isic2018_H')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/DRIVE_2/epoch_149.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/DRIVE', help='The path of the dataset')
+    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/DRIVE_2')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=4, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
-    parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/visualization/isic2018')  
+    parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/visualization/DRIVE')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
@@ -298,20 +298,20 @@ if __name__ == '__main__':
         os.makedirs(log_folder)
     if not os.path.exists(args.visual_path):
         os.makedirs(args.visual_path)
+
     # time
     output_filename = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    logging.basicConfig(filename= log_folder+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
+    logging.basicConfig(filename= log_folder+'/'+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
-
-
+    
     if args.is_savenii:
         test_save_path = log_folder
     else:
         test_save_path = None
 
-
     low_res = img_embedding_size * 4
+   
     inference_2d(args, multimask_output, net,  low_res, log_folder)
 
