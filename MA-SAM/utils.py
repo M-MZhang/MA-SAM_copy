@@ -41,26 +41,13 @@ class HD_Score(nn.Module):
         return output_tensor.float()
     
     def forward(self, inputs, target, softmax=False):
-        # if self.n_classes > 1:
-        #     target = self._one_hot_encoder(target)
-        # if softmax:
-        #     inputs = torch.softmax(inputs, dim=1)
+      
         assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(),
                                                                                                   target.size())
-        # 非全0检测:
-        flag = True
-        b, h, w = inputs.shape
-        for i in range(b):
-            if not np.any(inputs[i].cpu().numpy()):
-                flag = False
-                break
-
-        if flag:
-            hd = self.hd(inputs.unsqueeze(1), target.unsqueeze(1)).mean() 
-        else:
-            hd = 0
+        hd = self.hd(inputs.unsqueeze(1), target.unsqueeze(1)).mean() 
+        hd = torch.mean(hd)
      
-        return hd
+        return hd.item()
 
 
 class DiceLoss(nn.Module):

@@ -183,7 +183,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                             worker_init_fn=worker_init_fn, drop_last=False)
 
-    hd = 0
+    hd = []
     dice = 0
     num_test = 0
     h_num = 0
@@ -201,10 +201,9 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
             
             out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
             h = hd_score(out, label_batch)
-            if h !=0 :
-                hd += h
-                h_num += image_batch.shape[0]
-            hd += hd_score(out, label_batch)
+            if h != float("inf") and np.isnan(h) == False:
+                hd.append(h)
+            
             out = out.cpu().detach().numpy()
             label_batch = label_batch.cpu().detach().numpy()
             dice += calculate_metric_percase(out, label_batch) * label_batch.shape[0]
@@ -218,7 +217,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
                 label.save(os.path.join(args.visual_path,str(i_batch)+'_label.png'))
 
             
-    hd = hd.item() / h_num
+    hd = round(np.mean(hd), 4)
     dice = dice / num_test
 
     logging.info("DICE:{}, HD:{}".format(dice, hd))
@@ -242,14 +241,14 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/UDIAT/epoch_169.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BUSI')
-    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/BUSI')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/isic2018_H/epoch_99.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/isic2018')
+    parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/isic2018_H')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=4, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
-    parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/visualization/BUSI')  
+    parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/visualization/isic2018')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
@@ -297,6 +296,8 @@ if __name__ == '__main__':
     log_folder = os.path.join(args.output_dir, 'testing_log')
     if not os.path.exists(log_folder):
         os.makedirs(log_folder)
+    if not os.path.exists(args.visual_path):
+        os.makedirs(args.visual_path)
     # time
     output_filename = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     logging.basicConfig(filename= log_folder+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
