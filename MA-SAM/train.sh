@@ -1,6 +1,6 @@
 TRAINER="HSP-SAM"
 
-DATASET=("isic2018" "DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018")
+DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
 ROOT_PATH="/root/data1/zmm/seg4medicine/data"
 OUTPUT_PATH="/root/data1/zmm/seg4medicine/save/${TRAINER}"
 CONFIG="lr_0.0012"
@@ -16,7 +16,7 @@ do
         --output=${OUTPUT} \
         --visual_path=${VISUAL_PATH} \
         --root_path=${DATA_PATH} \
-        --num_classes=1 \
+        --num_classes=1 \ 
         --batch_size=8 \
         --n_gpu=2 \
         --base_lr=0.0012 

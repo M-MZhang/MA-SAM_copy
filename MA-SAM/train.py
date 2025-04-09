@@ -40,7 +40,7 @@ parser.add_argument('--adapt_ckpt', type=str, default=None, help='Finetuned chec
 parser.add_argument('--rank', type=int, default=32, help='Rank for FacT')
 parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')
 parser.add_argument('--warmup', action='store_true', help='If activated, warp up the learning from a lower lr to the base_lr')
-parser.add_argument('--warmup_period', type=int, default=50, help='Warp up iterations, only valid when warmup is activated')
+parser.add_argument('--warmup_period', type=int, default=250, help='Warp up iterations, only valid when warmup is activated')
 parser.add_argument('--AdamW', action='store_true', help='If activated, use AdamW to finetune SAM model')
 parser.add_argument('--module', type=str, default='task_specific_sam')
 parser.add_argument('--dice_param', type=float, default=0.8)
