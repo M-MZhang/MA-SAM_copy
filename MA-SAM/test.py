@@ -226,6 +226,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     if test_save_path is not None:
         write_json(loss, test_save_path+'/result.json')
     print("Finish test haha!")
+    return dice
     
 
 
@@ -313,5 +314,5 @@ if __name__ == '__main__':
 
     low_res = img_embedding_size * 4
    
-    inference_2d(args, multimask_output, net,  low_res, log_folder)
+    _ = inference_2d(args, multimask_output, net,  low_res, log_folder)
 
