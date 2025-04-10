@@ -115,10 +115,24 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         os.mkdir(args.output + '/training_log')
     # time
     output_filename = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    logging.basicConfig(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_'+ output_filename + '_log.txt', level=logging.INFO,
-                        format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    logging.info(str(args))
+    # logging.basicConfig(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_'+ output_filename + '_log.txt', level=logging.INFO,
+    #                     format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
+    logger = logging.getLogger('my_logger')
+    logger.setLevel(logging.INFO)
+
+    # 2. 创建文件处理器
+    file_handler = logging.FileHandler(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_'+ output_filename + '_log.txt')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    
+    # logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+    # logging.getLogger().addHandler(logging.StreamHandler())
+    
+    logger.info(str(args))
+    
+    
     base_lr = args.base_lr
     num_classes = args.num_classes 
     batch_size = args.batch_size * args.n_gpu
@@ -176,7 +190,8 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     else:
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
     if args.use_amp:
-        scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
+        # scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
+        scaler = torch.amp.GradScaler(enabled=args.use_amp)
 
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     #         optimizer, float(args.max_epochs)
@@ -198,7 +213,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    inference_2d(args, multimask_output, model,  low_res, None)
+    _ = inference_2d(args, multimask_output, model,  low_res, None)
 
     best_dice = -np.inf
     for epoch_num in iterator:
