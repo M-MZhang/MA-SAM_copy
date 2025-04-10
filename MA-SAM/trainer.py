@@ -260,6 +260,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                     model.save_parameters(save_mode_path)
                 except:
                     model.module.save_parameters(save_mode_path)
+                logging.info("save best model {} to {}".format('epoch_' + str(epoch_num) , save_mode_path))
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')

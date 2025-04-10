@@ -3,7 +3,7 @@ TRAINER="HSP-SAM"
 DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
 ROOT_PATH="/root/data1/zmm/seg4medicine/data"
 OUTPUT_PATH="/root/data1/zmm/seg4medicine/save/${TRAINER}"
-CONFIG="lr_0.0012"
+CONFIG="lr_0.0012_weight_decay_0.1"
 
 for dataset in ${DATASET[@]}
 do
@@ -11,13 +11,13 @@ do
     OUTPUT="${OUTPUT_PATH}/${dataset}/${CONFIG}"
     VISUAL_PATH="/root/data1/zmm/seg4medicine/visualization/${dataset}"
 
-    CUDA_VISIBLE_DEVICES=0,1 python3 train.py \
+    python train.py \
         --data_path=${DATA_PATH} \
         --output=${OUTPUT} \
         --visual_path=${VISUAL_PATH} \
         --root_path=${DATA_PATH} \
-        --num_classes=1 \ 
-        --batch_size=8 \
+        --num_classes=1 \
+        --batch_size=24 \
         --n_gpu=2 \
         --base_lr=0.0012 
 done
