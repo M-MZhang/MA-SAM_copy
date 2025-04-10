@@ -1,6 +1,6 @@
 TRAINER="HSP-SAM"
 
-DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
+DATASET=("CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
 CONFIG="lr_0.0012_weight_decay_0.1"
@@ -17,7 +17,7 @@ do
         --visual_path=${VISUAL_PATH} \
         --root_path=${DATA_PATH} \
         --num_classes=1 \
-        --batch_size=24 \
+        --batch_size=20 \
         --n_gpu=2 \
         --base_lr=0.0012 \
         --weight_decay=0.1 \

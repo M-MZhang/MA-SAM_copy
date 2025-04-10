@@ -163,7 +163,7 @@ def inference(args, multimask_output, model, test_save_path=None):
     logging.info("Testing Finished!")
     return 1
 
-def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
+def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=None):
 
     hd_score = HD_Score(n_classes=args.num_classes+1)
     # hd_metric = HausdorffDistance()
@@ -220,7 +220,7 @@ def inference_2d(args, multimask_output, model, low_res, test_save_path=None):
     hd = round(np.mean(hd), 4)
     dice = dice / num_test
 
-    logging.info("DICE:{}, HD:{}".format(dice, hd))
+    logger.info("DICE:{}, HD:{}".format(dice, hd))
     
     loss = {'DICE':dice, 'HD': hd}
     if test_save_path is not None:
@@ -302,10 +302,22 @@ if __name__ == '__main__':
 
     # time
     output_filename = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    logging.basicConfig(filename= log_folder+'/'+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
-                        format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    logging.info(str(args))
+    # logging.basicConfig(filename= log_folder+'/'+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
+    #                     format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
+    # logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+    # logging.info(str(args))
+    logger = logging.getLogger('my_logger')
+    logger.setLevel(logging.INFO)
+
+    # 2. 创建文件处理器
+    file_handler = logging.FileHandler(filename=log_folder+'/'+args.adapt_ckpt.split('/')[-1] +'_log.txt')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    
+
+    logger.info(str(args))
     
     if args.is_savenii:
         test_save_path = log_folder
@@ -314,5 +326,5 @@ if __name__ == '__main__':
 
     low_res = img_embedding_size * 4
    
-    _ = inference_2d(args, multimask_output, net,  low_res, log_folder)
+    _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
 
