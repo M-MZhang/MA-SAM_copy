@@ -170,7 +170,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         if para.requires_grad:
             print(name)
             logging.info(name)
-    logging.info("The number of trainable parameters is {}M".format(num/1000000))
+    logger.info("The number of trainable parameters is {}M".format(num/1000000))
 
     # model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
 
@@ -208,7 +208,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     max_epoch = args.max_epochs
     stop_epoch = args.stop_epoch
     max_iterations = args.max_epochs * len(trainloader)
-    logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
+    logger.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
     
     iterator = tqdm(range(max_epoch), ncols=70)
 
@@ -256,7 +256,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             writer.add_scalar('info/loss_ce', loss_ce, iter_num)
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
 
-            logging.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f, lr: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item(),lr_))
+            logger.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f, lr: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item(),lr_))
 
         save_interval = 10
         if (epoch_num + 1) % save_interval == 0:
@@ -266,7 +266,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             except:
                 model.module.save_parameters(save_mode_path)
                 # torch.save(model.module.state_dict(), save_mode_path)
-            logging.info("save model to {}".format(save_mode_path))
+            logger.info("save model to {}".format(save_mode_path))
             dice = inference_2d(args, multimask_output, model,  low_res, None)
             if dice > best_dice:
                 best_dice = dice
@@ -275,7 +275,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                     model.save_parameters(save_mode_path)
                 except:
                     model.module.save_parameters(save_mode_path)
-                logging.info("save best model {} to {}".format('epoch_' + str(epoch_num) , save_mode_path))
+                logger.info("save best model {} to {}".format('epoch_' + str(epoch_num) , save_mode_path))
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
@@ -284,7 +284,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             except:
                 model.module.save_parameters(save_mode_path)
                 # torch.save(model.module.state_dict(), save_mode_path)
-            logging.info("save model to {}".format(save_mode_path))
+            logger.info("save model to {}".format(save_mode_path))
             iterator.close()
             break
 
