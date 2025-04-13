@@ -672,7 +672,6 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes) # 4
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
-        # self.task_adapter = Task_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num+1)
         self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
         self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
@@ -719,8 +718,6 @@ class Sam_task(nn.Module):
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
-                # task_specific_embed
-                # task_specific_embed = torch.empty_like(sam_model.mask_decoder.mask_tokens.weight) #[task_num, decoder_embed]
                 task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
@@ -733,8 +730,7 @@ class Sam_task(nn.Module):
                     w_b_linear_q,
                     w_a_linear_v,
                     w_b_linear_v,
-                )
-                # sam_model.image_encoder[layer_i] = blk     
+                )  
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
@@ -792,17 +788,6 @@ class Sam_task(nn.Module):
         return outputs
     
     def init_weights(self):
-        # task_adapter = self.task_adapter.neck_list
-        # mask_adapter = self.task_adapter.mask_adapter_mlp_list
-        # layers = len(task_adapter)
-        # for layer in range(layers):
-        #     nn.init.constant_(task_adapter[layer][-1].weight, 0)
-        #     nn.init.constant_(task_adapter[layer][-1].bias, 0)
-            
-        #  #init the mask_adapter
-        #     for item in mask_adapter[layer]:
-        #         nn.init.constant_(item.layers[-1].weight, 0)
-        #         nn.init.constant_(item.layers[-1].weight, 0)
         
         for w_A in self.w_As:
             nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
@@ -824,9 +809,7 @@ class Sam_task(nn.Module):
         task_adapter_tensors = {}
         neck_list_tensors = {}
         prompt_encoder_tensors = {}
-        # u_decoder_tensors = {}
         mask_decoder_tensors = {}
-        # mask_adapter_tensors = {}
 
         
         if isinstance(self, torch.nn.DataParallel) or isinstance(self, torch.nn.parallel.DistributedDataParallel):
@@ -837,8 +820,6 @@ class Sam_task(nn.Module):
         for key, value in self_state_dict.items():
             if 'Neck_list' in key:
                 neck_list_tensors[key] = value
-            # if 'prompt_encoder' in key:
-            #     prompt_encoder_tensors[key] = value
             if 'task_adapter' in key:
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key and 'sam' not in key:
@@ -854,25 +835,10 @@ class Sam_task(nn.Module):
 
         state_dict = torch.load(filename)
 
-        for i, w_A_linear in enumerate(self.w_As):
-            saved_key = f"w_a_{i:03d}"
-            saved_tensor = state_dict[saved_key]
-            w_A_linear.weight = nn.Parameter(saved_tensor)
-
-        for i, w_B_linear in enumerate(self.w_Bs):
-            saved_key = f"w_b_{i:03d}"
-            saved_tensor = state_dict[saved_key]
-            w_B_linear.weight = nn.Parameter(saved_tensor)
-
+       
         sam_dict = self.state_dict() #调整为针对self的字典
         sam_keys = sam_dict.keys()
 
-        # load task_specific_embed
-        for i, task_embed in enumerate(self.task_specific_embed_list):
-            saved_key = f"task_specific_embed_{i:03d}"
-            saved_tensor = state_dict[saved_key]
-            task_embed = nn.Parameter(saved_tensor)
-        
         # load task_adapter
         task_adapter_keys = [k for k in sam_keys if 'task_adapter' in k]
         task_adapter_values = [state_dict[k] for k in task_adapter_keys]
@@ -885,12 +851,6 @@ class Sam_task(nn.Module):
         neck_list_state_dict = {k:v for k, v in zip(neck_list_keys, neck_list_values)}
         sam_dict.update(neck_list_state_dict)
 
-        # load prompt_encoder
-        # prompt_encoder_keys = [k for k in sam_keys if 'prompt_encoder' in k]
-        # prompt_encoder_values = [state_dict[k] for k in prompt_encoder_keys]
-        # prompt_encoder_state_dict = {k:v for k, v in zip(prompt_encoder_keys, prompt_encoder_values)}
-        # sam_dict.update(prompt_encoder_state_dict)
-
         # load mask_decoder
         mask_decoder_keys = [k for k in sam_keys if 'mask_decoder' in k and 'sam' not in k]
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
@@ -899,6 +859,25 @@ class Sam_task(nn.Module):
 
 
         self.load_state_dict(sam_dict)
+
+        # 因为这下面的内容并不是存于字典的
+        for i, w_A_linear in enumerate(self.w_As):
+            saved_key = f"w_a_{i:03d}"
+            saved_tensor = state_dict[saved_key]
+            w_A_linear.weight = nn.Parameter(saved_tensor)
+
+        for i, w_B_linear in enumerate(self.w_Bs):
+            saved_key = f"w_b_{i:03d}"
+            saved_tensor = state_dict[saved_key]
+            w_B_linear.weight = nn.Parameter(saved_tensor)
+
+         # load task_specific_embed
+        for i, task_embed in enumerate(self.task_specific_embed_list):
+            saved_key = f"task_specific_embed_{i:03d}"
+            saved_tensor = state_dict[saved_key]
+            task_embed = nn.Parameter(saved_tensor)
+        
+
 
 
 

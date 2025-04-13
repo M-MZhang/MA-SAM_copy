@@ -126,9 +126,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(file_handler)
     logger.addHandler(logging.StreamHandler(sys.stdout))
-    
-    # logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    # logging.getLogger().addHandler(logging.StreamHandler())
+
     
     logger.info(str(args))
     
@@ -213,7 +211,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    _ = inference_2d(args, multimask_output, model,  low_res, None)
+    _ = inference_2d(args, multimask_output, model,  low_res, logger, None)
 
     best_dice = -np.inf
     for epoch_num in iterator:
