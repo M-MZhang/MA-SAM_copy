@@ -170,7 +170,6 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             logger.info(name)
     logger.info("The number of trainable parameters is {}M".format(num/1000000))
 
-    # model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
@@ -191,16 +190,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         # scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
         scaler = torch.amp.GradScaler(enabled=args.use_amp)
 
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    #         optimizer, float(args.max_epochs)
-    #     )
-    
-    # if args.warmup:
-    #     scheduler = ConstantWarmupScheduler(
-    #             optimizer, scheduler, args.warmup_period,
-    #             1e-5
-    #         )
-    
+   
     writer = SummaryWriter(snapshot_path + '/log')
     iter_num = 0
     max_epoch = args.max_epochs
@@ -211,9 +201,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    _ = inference_2d(args, multimask_output, model,  low_res, logger, None)
+    best_dice = inference_2d(args, multimask_output, model,  low_res, logger, None)
 
-    best_dice = -np.inf
+    # best_dice = -np.inf
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
             image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
@@ -262,8 +252,8 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             try:
                 model.save_parameters(save_mode_path)
             except:
-                model.module.save_parameters(save_mode_path)
-                # torch.save(model.module.state_dict(), save_mode_path)
+                # model.module.save_parameters(save_mode_path)
+                torch.save(model.module.state_dict(), save_mode_path)
             logger.info("save model to {}".format(save_mode_path))
             dice = inference_2d(args, multimask_output, model,  low_res, logger, None)
             if dice > best_dice:
@@ -273,6 +263,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                     model.save_parameters(save_mode_path)
                 except:
                     model.module.save_parameters(save_mode_path)
+                    # torch.save(model.module.state_dict(), save_mode_path)
                 logger.info("save best model {} to {}".format('epoch_' + str(epoch_num) , save_mode_path))
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
@@ -280,8 +271,8 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             try:
                 model.save_parameters(save_mode_path)
             except:
-                model.module.save_parameters(save_mode_path)
-                # torch.save(model.module.state_dict(), save_mode_path)
+                # model.module.save_parameters(save_mode_path)
+                torch.save(model.module.state_dict(), save_mode_path)
             logger.info("save model to {}".format(save_mode_path))
             iterator.close()
             break

@@ -19,7 +19,7 @@ do
         --output_dir=${OUTPUT} \
         --visual_path=${VISUAL_PATH} \
         --n_gpu=2 \
-        --batch_size=24 \
+        --batch_size=20 \
         --num_classes=1 \
         --vit_name='vit_h' \
         --ckpt='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth'\

@@ -18,12 +18,12 @@ import os
 # os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/data/DRIVE', help='root dir for data')
-parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/HSP-SAM/DRIVE/lr_0.0012_0.1')
-parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/HSP-SAM/DRIVE')
-parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/DRIVE', help='data dir')
+parser.add_argument('--root_path', type=str, default='/root/autodl-tmp/data/UDIAT', help='root dir for data')
+parser.add_argument('--output', type=str, default='/root/autodl-tmp/save/HSP-SAM/UDIAT/test')
+parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/HSP-SAM/UDIAT')
+parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/UDIAT', help='data dir')
 parser.add_argument('--num_classes', type=int, default=1, help='output channel of network')
-parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu')
+parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
 parser.add_argument('--n_gpu', type=int, default=2, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0012, help='segmentation network learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.01, help='weight decay')

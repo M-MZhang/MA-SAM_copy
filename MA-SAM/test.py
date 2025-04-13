@@ -27,6 +27,7 @@ import nibabel as nib
 from datasets.dataset import dataset_reader, RandomGenerator
 from torchvision import transforms
 import json
+from torch import nn
 
 # from mindspore.nn.metrics import HausdorffDistance
 
@@ -167,7 +168,8 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
 
     hd_score = HD_Score(n_classes=args.num_classes+1)
     # hd_metric = HausdorffDistance()
-  
+    # if args.n_gpu > 1:
+    #     model = nn.DataParallel(model)
     model.eval()
     db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
                             transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
@@ -180,7 +182,7 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
+    testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
                             worker_init_fn=worker_init_fn, drop_last=False)
 
     hd = []
@@ -242,13 +244,13 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/UDIAT/lr_0.0012_weight_decay_0.1/epoch_299.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/UDIAT', help='The path of the dataset')
-    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/UDIAT/lr_0.0012_weight_decay_0.1')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/lr_0.0012_weight_decay_0.1/best.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/TNBC', help='The path of the dataset')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/TNBC/lr_0.0012_weight_decay_0.1')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
-    parser.add_argument('--batch_size', type=int, default=4, help='batch_size per gpu')
-    parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
+    parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
+    parser.add_argument('--n_gpu', type=int, default=2, help='total gpu') 
     parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/DRIVE')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
@@ -268,6 +270,7 @@ if __name__ == '__main__':
     else:
         cudnn.benchmark = False
         cudnn.deterministic = True
+    
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -286,6 +289,7 @@ if __name__ == '__main__':
 
     assert args.adapt_ckpt is not None
     net.load_parameters(args.adapt_ckpt)
+    # net.load_state_dict(torch.load(args.adapt_ckpt))
    
 
     if args.num_classes > 1:
@@ -302,10 +306,6 @@ if __name__ == '__main__':
 
     # time
     output_filename = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
-    # logging.basicConfig(filename= log_folder+'/'+args.adapt_ckpt.split('/')[-1] +'_log.txt', level=logging.INFO,
-    #                     format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
-    # logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    # logging.info(str(args))
     logger = logging.getLogger('my_logger')
     logger.setLevel(logging.INFO)
 
@@ -326,5 +326,11 @@ if __name__ == '__main__':
 
     low_res = img_embedding_size * 4
    
+    # epoch_list = np.arange(9, 300, 10)
+    # for epoch in epoch_list:
+    #     adpt_ckpt = args.adapt_ckpt.replace('best.pth', 'epoch_{}.pth'.format(epoch))
+    #     logger.info('Loading checkpoint from {}'.format(adpt_ckpt))
+    #     assert args.adapt_ckpt is not None
+    #     net.load_parameters(adpt_ckpt)
     _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
 
