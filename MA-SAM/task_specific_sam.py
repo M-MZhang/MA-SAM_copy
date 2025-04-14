@@ -199,26 +199,23 @@ class ImageEncoderViT_task(nn.Module):
         self.init_layers = init_layers
         self.img_size = self.ImageEncoderViT.img_size
 
-    def forward(self, x: torch.Tensor, task_embed: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.ImageEncoderViT.patch_embed(x)
         if self.ImageEncoderViT.pos_embed is not None:
             x = x + self.ImageEncoderViT.pos_embed
 
         outputs = []
-        count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.init_layers:
-                x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
-                count += 1
-                outputs.append(x)
-            else:
-                x = self.ImageEncoderViT.blocks[i](x) 
-                # if i == 0:
-                #     outputs.append(x)
+            # if i in self.init_layers:
+            x = self.ImageEncoderViT.blocks[i](x)
+                # 只收集，不调整
+                
+            # else:
+                # x = self.ImageEncoderViT.blocks[i](x) 
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
-        
+        outputs.append(x)
 
         return outputs
 
@@ -528,15 +525,12 @@ class MaskDecoder_task(nn.Module):
         output_tokens = torch.cat([self.iou_tokens.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
 
-        # original_embedding = image_embeddings[0]
-        # image_embeddings = image_embeddings[1:]
-        
+      
         # Run the transforme
         for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
             # Expand per-image data in batch direction to be per-mask
             if i == self.num_layer-1:
-                mask_tokens = task_specific_embed[i].unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
-                hs = torch.cat((output_tokens, sparse_prompt_embeddings, mask_tokens), dim=1)
+                hs = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1) # no mask tokens
                 src = torch.repeat_interleave(image_embeddings[i], hs.shape[0], dim=0)
                 src = src + dense_prompt_embeddings
                 b, c, h, w = src.shape
@@ -545,17 +539,12 @@ class MaskDecoder_task(nn.Module):
                 hs0=hs
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) + src0# use other image_embedding as adapter
-                mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
-                hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1) 
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # no residual connection
+                # mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
+                # hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)  #没有需要替换掉的mask_tokens
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
-        
-        # #增补第一层的细节？
-        # hs = hs[:, :-self.num_mask_tokens, :]
-        # src = src + original_embedding.flatten(2).permute(0, 2, 1) + src0
-        # hs, src = self.last_transformer(src, pos_src, hs)
-        
+
         
         iou_token_out = hs[:, 0, :]
         mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
@@ -672,10 +661,10 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes) # 4
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
-        self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
+        # self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
+        # self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
-        self.task_specific_embed_list = nn.ParameterList()
+        # self.task_specific_embed_list = nn.ParameterList()
 
         # lora
         if lora_layer:
@@ -707,30 +696,30 @@ class Sam_task(nn.Module):
             self.w_As.append(w_a_linear_v)
             self.w_Bs.append(w_b_linear_v)
 
-            if layer_i in sam_model.image_encoder.global_attn_indexes:
-                blk.attn.qkv = _LoRA_qkv_global(
-                    w_qkv_linear,
-                    w_a_linear_q,
-                    w_b_linear_q,
-                    w_a_linear_v,
-                    w_b_linear_v,
-                )
-                blk.attn = Attention_task(blk.attn)
-                sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
+            # if layer_i in sam_model.image_encoder.global_attn_indexes:
+            #     blk.attn.qkv = _LoRA_qkv_global(
+            #         w_qkv_linear,
+            #         w_a_linear_q,
+            #         w_b_linear_q,
+            #         w_a_linear_v,
+            #         w_b_linear_v,
+            #     )
+            #     blk.attn = Attention_task(blk.attn)
+            #     sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
-                task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
-                nn.init.normal_(task_specific_embed, std=0.02)
-                task_specific_embed = nn.Parameter(task_specific_embed)
-                self.task_specific_embed_list.append(task_specific_embed)
+                # task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
+                # nn.init.normal_(task_specific_embed, std=0.02)
+                # task_specific_embed = nn.Parameter(task_specific_embed)
+                # self.task_specific_embed_list.append(task_specific_embed)
 
-            else:
-                blk.attn.qkv = _LoRA_qkv(
-                    w_qkv_linear,
-                    w_a_linear_q,
-                    w_b_linear_q,
-                    w_a_linear_v,
-                    w_b_linear_v,
-                )  
+            # else:
+            blk.attn.qkv = _LoRA_qkv(
+                w_qkv_linear,
+                w_a_linear_q,
+                w_b_linear_q,
+                w_a_linear_v,
+                w_b_linear_v,
+            )  
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
@@ -755,10 +744,10 @@ class Sam_task(nn.Module):
         input_images = self.sam.preprocess(batched_input)
 
         # get image and mask task_embeds
-        mask_task_embed = self.task_adapter(self.task_specific_embed_list)
+        # mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
-        image_embeddings = self.sam.image_encoder(input_images, self.task_specific_embed_list) #
-        image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
+        image_embeddings = self.sam.image_encoder(input_images) # no task_embed
+        # image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
@@ -771,7 +760,7 @@ class Sam_task(nn.Module):
             sparse_prompt_embeddings=sparse_embeddings,
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
-            task_specific_embed = mask_task_embed,
+            task_specific_embed = None,
         )
 
         masks = self.sam.postprocess_masks(
