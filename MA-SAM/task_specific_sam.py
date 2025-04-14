@@ -205,16 +205,19 @@ class ImageEncoderViT_task(nn.Module):
             x = x + self.ImageEncoderViT.pos_embed
 
         outputs = []
-        count = 0
+        # count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.init_layers:
-                x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
-                count += 1
-                outputs.append(x)
-            else:
+            # if i in self.init_layers:
+            #     x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
+            #     count += 1
+            #     outputs.append(x)
+            # else:
                 x = self.ImageEncoderViT.blocks[i](x) 
                 # if i == 0:
                 #     outputs.append(x)
+        
+        # use the last output
+        outputs.append(x)
             
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
@@ -472,7 +475,7 @@ class MaskDecoder_task(nn.Module):
             ]
         )
     
-        for i in range(num_layer):
+        for i in range(num_layer): # ablation-1中，只有一层这个了
             n_transformer = TwoWayTransformer(
                 depth=2,
                 embedding_dim=transformer_dim,
@@ -482,13 +485,13 @@ class MaskDecoder_task(nn.Module):
             )
             self.transformer_list.append(n_transformer)
         
-        self.last_transformer = TwoWayTransformer(
-                depth=2,
-                embedding_dim=transformer_dim,
-                mlp_dim=2048,
-                num_heads=8,
-                final_trans=(i==0)
-        )
+        # self.last_transformer = TwoWayTransformer(
+        #         depth=2,
+        #         embedding_dim=transformer_dim,
+        #         mlp_dim=2048,
+        #         num_heads=8,
+        #         final_trans=(i==0)
+        # )
             
             # self.transformer_list.append(copy.deepcopy(MaskDecoder.transformer))
         
@@ -551,20 +554,15 @@ class MaskDecoder_task(nn.Module):
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
         
-        # #增补第一层的细节？
-        # hs = hs[:, :-self.num_mask_tokens, :]
-        # src = src + original_embedding.flatten(2).permute(0, 2, 1) + src0
-        # hs, src = self.last_transformer(src, pos_src, hs)
-        
+      
         
         iou_token_out = hs[:, 0, :]
         mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
-        # print(src.shape)
         upscaled_embedding = self.output_upscaling(src) #[b, embed_dim//32, pos_dim*16]
-        # print(upscaled_embedding.shape)
+     
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
             hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
@@ -611,6 +609,7 @@ class Neck(nn.Module):
         super().__init__()
         # image_encoder_neck
         self.image_neck_list = nn.ModuleList()
+        # 这里不知道会不会报错，应该不会报错
         for i in range(global_attn_num-1): 
             neck = nn.Sequential(
                 nn.Conv2d(
@@ -631,7 +630,7 @@ class Neck(nn.Module):
             )
             self.image_neck_list.append(neck) # 这里用的是原版的neck,但是感觉好像也没啥好处？
         
-        self.image_neck_list.append(image_encoder.neck) # init the last neck conv by original one
+        self.image_neck_list.append(copy.deepcopy(image_encoder.neck)) # init the last neck conv by original one
         
     def forward(self, image_embeddings):
         for i in range(len(self.image_neck_list)):
@@ -672,10 +671,15 @@ class Sam_task(nn.Module):
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes) # 4
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
-        self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, 1)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, 1)
         
+        # ablation-1 只有一层task_embed的情况
         self.task_specific_embed_list = nn.ParameterList()
+        task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
+        nn.init.normal_(task_specific_embed, std=0.02)
+        task_specific_embed = nn.Parameter(task_specific_embed)
+        self.task_specific_embed_list.append(task_specific_embed)
 
         # lora
         if lora_layer:
@@ -718,10 +722,10 @@ class Sam_task(nn.Module):
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
-                task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
-                nn.init.normal_(task_specific_embed, std=0.02)
-                task_specific_embed = nn.Parameter(task_specific_embed)
-                self.task_specific_embed_list.append(task_specific_embed)
+                # task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
+                # nn.init.normal_(task_specific_embed, std=0.02)
+                # task_specific_embed = nn.Parameter(task_specific_embed)
+                # self.task_specific_embed_list.append(task_specific_embed)
 
             else:
                 blk.attn.qkv = _LoRA_qkv(
@@ -733,7 +737,7 @@ class Sam_task(nn.Module):
                 )  
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
-        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
+        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, 1, decoder_dim) # 只有最后一层
         
         self.sam = sam_model
 
