@@ -539,7 +539,7 @@ class MaskDecoder_task(nn.Module):
                 hs0=hs
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
-                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) # no residual connection
+                src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) + src0 # add residual connection
                 # mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 # hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1)  #没有需要替换掉的mask_tokens
              
