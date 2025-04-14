@@ -205,25 +205,16 @@ class ImageEncoderViT_task(nn.Module):
             x = x + self.ImageEncoderViT.pos_embed
 
         outputs = []
-        # count = 0
+        count=0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            # if i in self.init_layers:
-            #     x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
-            #     count += 1
-            #     outputs.append(x)
-            # else:
+            if i in self.init_layers[-1]:
+                x = self.ImageEncoderViT.blocks[i](x, task_embed[count]) 
+                outputs.append(x) 
+            else:
                 x = self.ImageEncoderViT.blocks[i](x) 
-                # if i == 0:
-                #     outputs.append(x)
-        
-        # use the last output
-        outputs.append(x)
-            
-
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
-        
 
-        return outputs
+        return outputs # 输出的就是最后一层的x
 
 class Task_adapter(nn.Module):
 
@@ -711,7 +702,7 @@ class Sam_task(nn.Module):
             self.w_As.append(w_a_linear_v)
             self.w_Bs.append(w_b_linear_v)
 
-            if layer_i in sam_model.image_encoder.global_attn_indexes:
+            if layer_i ==sam_model.image_encoder.global_attn_indexes[-1]: # 仅最后一层是有task_embed的
                 blk.attn.qkv = _LoRA_qkv_global(
                     w_qkv_linear,
                     w_a_linear_q,
@@ -721,12 +712,6 @@ class Sam_task(nn.Module):
                 )
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
-
-                # task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
-                # nn.init.normal_(task_specific_embed, std=0.02)
-                # task_specific_embed = nn.Parameter(task_specific_embed)
-                # self.task_specific_embed_list.append(task_specific_embed)
-
             else:
                 blk.attn.qkv = _LoRA_qkv(
                     w_qkv_linear,
