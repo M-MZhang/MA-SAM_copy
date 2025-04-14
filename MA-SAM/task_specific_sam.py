@@ -540,6 +540,7 @@ class MaskDecoder_task(nn.Module):
                 pos_src = torch.repeat_interleave(image_pe, hs.shape[0], dim=0)
             else:
                 src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) + src0# use other image_embedding as adapter
+                # self.num_layer=1的时候，并不会走到这个分支
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1) 
              
@@ -620,6 +621,7 @@ class Neck(nn.Module):
                 LayerNorm2d(decoder_dim),
             )
             self.image_neck_list.append(neck) # 这里用的是原版的neck,但是感觉好像也没啥好处？
+        # global_attn_num=1的时候上面的支线不会被触发
         
         self.image_neck_list.append(copy.deepcopy(image_encoder.neck)) # init the last neck conv by original one
         
