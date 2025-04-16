@@ -24,7 +24,7 @@ from scipy.ndimage import zoom
 from utils import calculate_metric_percase, write_json, HD_Score
 import nibabel as nib
 
-from datasets.dataset import dataset_reader, RandomGenerator
+from datasets.dataset import dataset_reader, test_transform
 from torchvision import transforms
 import json
 from torch import nn
@@ -172,7 +172,7 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
     #     model = nn.DataParallel(model)
     model.eval()
     db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
-                            transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
+                            transform=transforms.Compose([test_transform(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
                             test_name=None)
 
     print("The length of test set is: {}".format(len(db_test)))
