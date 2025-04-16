@@ -326,14 +326,14 @@ class RandomGenerator(object):
         if random.random() > 0.5:
             image, label = random_erasing(imgs=image, label=label, rng=self.rng)
         
-        # inds = self.rng.choice(len(self.ops), size=self.n, replace=False)
-        # for i in inds:
-        #     op = self.ops[i]
-        #     aug_func = op[0]
-        #     aug_params = op[1]
-        #     v = self.rng.uniform(aug_params[0], aug_params[1])
+        inds = self.rng.choice(len(self.ops), size=self.n, replace=False)
+        for i in inds:
+            op = self.ops[i]
+            aug_func = op[0]
+            aug_params = op[1]
+            v = self.rng.uniform(aug_params[0], aug_params[1])
 
-        #     image, label = aug_func(image, label, v)
+            image, label = aug_func(image, label, v)
 
         x, y, z = image.shape
         if x != self.output_size[0] or y != self.output_size[1]:
@@ -352,6 +352,30 @@ class RandomGenerator(object):
         sample = {'image': image, 'label': label.long(), 'low_res_label': low_res_label.long()}
         return sample
 
+class test_transform(object):
+    def __init__(self, output_size, low_res):
+        self.output_size = output_size
+        self.low_res = low_res
+    
+    def __call__(self,sample):
+        
+        image, label = sample['image'], sample['label']
+        x, y, z = image.shape
+        if x != self.output_size[0] or y != self.output_size[1]:
+            image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y, 1.0), order=3)
+            label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y, 1.0), order=0)
+        label_h, label_w, label_d = label.shape
+        low_res_label = zoom(label, (self.low_res[0] / label_h, self.low_res[1] / label_w, 1.0), order=0)
+        
+        image = torch.from_numpy(image.astype(np.float32))
+        label = torch.from_numpy(label.astype(np.float32))
+        low_res_label = torch.from_numpy(low_res_label.astype(np.float32))
+        image = image.permute(2, 0, 1)
+        label = label.permute(2, 0, 1)
+        low_res_label = low_res_label.permute(2, 0, 1)
+        
+        sample = {'image': image, 'label': label.long(), 'low_res_label': low_res_label.long()}
+        return sample
 
 class dataset_reader(Dataset):
     def __init__(self, base_dir, split, num_classes, transform=None, test_name=None):
@@ -401,13 +425,11 @@ class dataset_reader(Dataset):
         image = np.float32(data)
         label = np.float32(mask)
 
-    
-
         sample = {'image': image, 'label': label}
-        if self.transform:
+        if self.transform : #这里忘记取消test的随机变换了...
             sample['label'] = sample['label'][:, :, np.newaxis]
             sample = self.transform(sample)
             sample['label'] = np.squeeze(sample['label'], axis=0)
-
+    
         sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
         return sample

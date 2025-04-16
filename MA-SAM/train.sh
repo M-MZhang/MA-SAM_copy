@@ -1,9 +1,9 @@
 TRAINER="HSP-SAM"
 
-DATASET=("isic2018" "DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
+DATASET=("isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
-CONFIG="lr_0.0012_weight_decay_0.01"
+CONFIG="lr_0.0012_weight_decay_0.1_augmentation_True"
 
 for dataset in ${DATASET[@]}
 do
@@ -20,7 +20,7 @@ do
         --batch_size=20 \
         --n_gpu=2 \
         --base_lr=0.0012 \
-        --weight_decay=0.01 \
+        --weight_decay=0.1 \
         --vit_name='vit_h' \
         --ckpt='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth' 
 done

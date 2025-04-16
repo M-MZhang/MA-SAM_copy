@@ -1,6 +1,6 @@
 TRAINER="HSP-SAM"
 
-DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
+DATASET=("DRIVE ""CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
 # DATASET="dsb-2018"
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
