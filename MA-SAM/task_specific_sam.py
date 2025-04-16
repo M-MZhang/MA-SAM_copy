@@ -207,7 +207,7 @@ class ImageEncoderViT_task(nn.Module):
         outputs = []
         count=0
         for i in range(len(self.ImageEncoderViT.blocks)):
-            if i in self.init_layers[-1]:
+            if i == self.init_layers[-1]:
                 x = self.ImageEncoderViT.blocks[i](x, task_embed[count]) 
                 outputs.append(x) 
             else:
