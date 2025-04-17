@@ -206,16 +206,13 @@ class ImageEncoderViT_task(nn.Module):
 
         outputs = []
         for i in range(len(self.ImageEncoderViT.blocks)):
-            # if i in self.init_layers:
             x = self.ImageEncoderViT.blocks[i](x)
                 # 只收集，不调整
-                
-            # else:
-                # x = self.ImageEncoderViT.blocks[i](x) 
-            
+            if i in self.init_layers:
+                outputs.append(x)
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
-        outputs.append(x)
+     
 
         return outputs
 
@@ -662,7 +659,7 @@ class Sam_task(nn.Module):
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
         # self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        # self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
         # self.task_specific_embed_list = nn.ParameterList()
 
@@ -747,7 +744,7 @@ class Sam_task(nn.Module):
         # mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
         image_embeddings = self.sam.image_encoder(input_images) # no task_embed
-        # image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
+        image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
@@ -787,8 +784,8 @@ class Sam_task(nn.Module):
     def save_parameters(self, filename: str) ->None:
         
         assert filename.endswith(".pt") or filename.endswith('.pth')
-        num_task = self.global_attn_num
-        task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
+        # num_task = self.global_attn_num
+        # task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
 
         # lora
         num_layer = len(self.w_As)  # actually, it is half
@@ -815,7 +812,7 @@ class Sam_task(nn.Module):
                 mask_decoder_tensors[key] = value
         
 
-        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**a_tensors, **b_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -861,10 +858,10 @@ class Sam_task(nn.Module):
             w_B_linear.weight = nn.Parameter(saved_tensor)
 
          # load task_specific_embed
-        for i, task_embed in enumerate(self.task_specific_embed_list):
-            saved_key = f"task_specific_embed_{i:03d}"
-            saved_tensor = state_dict[saved_key]
-            task_embed = nn.Parameter(saved_tensor)
+        # for i, task_embed in enumerate(self.task_specific_embed_list):
+        #     saved_key = f"task_specific_embed_{i:03d}"
+        #     saved_tensor = state_dict[saved_key]
+        #     task_embed = nn.Parameter(saved_tensor)
         
 
 
