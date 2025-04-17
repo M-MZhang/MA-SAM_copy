@@ -789,7 +789,8 @@ class Sam_task(nn.Module):
     def save_parameters(self, filename: str) ->None:
         
         assert filename.endswith(".pt") or filename.endswith('.pth')
-        num_task = self.global_attn_num
+        # num_task = self.global_attn_num
+        num_task = 1 # 只有1层了
         task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
 
         # lora
