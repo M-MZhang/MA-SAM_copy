@@ -787,8 +787,8 @@ class Sam_task(nn.Module):
     def save_parameters(self, filename: str) ->None:
         
         assert filename.endswith(".pt") or filename.endswith('.pth')
-        num_task = self.global_attn_num
-        task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
+        # num_task = self.global_attn_num
+        # task_embed_tensors = {f"task_specific_embed_{i:03d}": self.task_specific_embed_list[i] for i in range(num_task)}
 
         # lora
         num_layer = len(self.w_As)  # actually, it is half
@@ -815,7 +815,7 @@ class Sam_task(nn.Module):
                 mask_decoder_tensors[key] = value
         
 
-        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**a_tensors, **b_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -860,11 +860,11 @@ class Sam_task(nn.Module):
             saved_tensor = state_dict[saved_key]
             w_B_linear.weight = nn.Parameter(saved_tensor)
 
-         # load task_specific_embed
-        for i, task_embed in enumerate(self.task_specific_embed_list):
-            saved_key = f"task_specific_embed_{i:03d}"
-            saved_tensor = state_dict[saved_key]
-            task_embed = nn.Parameter(saved_tensor)
+        # load task_specific_embed
+        # for i, task_embed in enumerate(self.task_specific_embed_list):
+        #     saved_key = f"task_specific_embed_{i:03d}"
+        #     saved_tensor = state_dict[saved_key]
+        #     task_embed = nn.Parameter(saved_tensor)
         
 
 
