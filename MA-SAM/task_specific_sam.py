@@ -209,13 +209,13 @@ class ImageEncoderViT_task(nn.Module):
             # if i in self.init_layers:
             x = self.ImageEncoderViT.blocks[i](x)
                 # 只收集，不调整
-                
-            # else:
-                # x = self.ImageEncoderViT.blocks[i](x) 
-            
+            if i in self.init_layers:
+                 outputs.append(x)
+
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
-        outputs.append(x)
+       
+
 
         return outputs
 
@@ -662,7 +662,7 @@ class Sam_task(nn.Module):
         num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
         
         # self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
-        # self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
         # self.task_specific_embed_list = nn.ParameterList()
 
@@ -747,7 +747,7 @@ class Sam_task(nn.Module):
         # mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
         image_embeddings = self.sam.image_encoder(input_images) # no task_embed
-        # image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
+        image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
         sparse_embeddings, dense_embeddings = self.sam.prompt_encoder(
