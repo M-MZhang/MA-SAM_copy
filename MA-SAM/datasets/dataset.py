@@ -326,14 +326,14 @@ class RandomGenerator(object):
         if random.random() > 0.5:
             image, label = random_erasing(imgs=image, label=label, rng=self.rng)
         
-        # inds = self.rng.choice(len(self.ops), size=self.n, replace=False)
-        # for i in inds:
-        #     op = self.ops[i]
-        #     aug_func = op[0]
-        #     aug_params = op[1]
-        #     v = self.rng.uniform(aug_params[0], aug_params[1])
+        inds = self.rng.choice(len(self.ops), size=self.n, replace=False)
+        for i in inds:
+            op = self.ops[i]
+            aug_func = op[0]
+            aug_params = op[1]
+            v = self.rng.uniform(aug_params[0], aug_params[1])
 
-        #     image, label = aug_func(image, label, v)
+            image, label = aug_func(image, label, v)
 
         x, y, z = image.shape
         if x != self.output_size[0] or y != self.output_size[1]:
