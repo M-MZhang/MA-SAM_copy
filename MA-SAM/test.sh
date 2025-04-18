@@ -4,7 +4,7 @@ DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
 # DATASET="dsb-2018"
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
-CONFIG="lr_0.0012_weight_decay_0.1"
+CONFIG="lr_0.0012_weight_decay_0.1_ablation_5"
 
 
 for dataset in ${DATASET[@]}
