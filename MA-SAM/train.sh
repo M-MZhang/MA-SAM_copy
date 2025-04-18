@@ -1,6 +1,6 @@
 TRAINER="HSP-SAM"
-DATASET="DRIVE"
-# DATASET=("isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018")
+# DATASET="DRIVE"
+DATASET=("isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018")
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
 CONFIG="lr_0.0012_weight_decay_0.1_ablation_1"
