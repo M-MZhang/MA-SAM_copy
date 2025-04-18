@@ -201,7 +201,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    best_dice, _ = inference(args, multimask_output, model,  low_res, logger, None)
+    best_dice = inference(args, multimask_output, model,  low_res, logger, None)
 
     # best_dice = -np.inf
     for epoch_num in iterator:
@@ -257,7 +257,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 model.module.save_parameters(save_mode_path)
                 # torch.save(model.module.state_dict(), save_mode_path)
             logger.info("save model to {}".format(save_mode_path))
-            dice, hd = inference_2d(args, multimask_output, model,  low_res, logger, None)
+            dice = inference(args, multimask_output, model,  low_res, logger, None)
             if dice > best_dice:
                 best_dice = dice
 
@@ -277,7 +277,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 model.module.save_parameters(save_mode_path)
                 # torch.save(model.module.state_dict(), save_mode_path)
             logger.info("save model to {}".format(save_mode_path))
-            logger.info("Training finished, best_dice is {}, hd is {}".format(best_dice, hd))
+            logger.info("Training finished, best_dice is {}".format(best_dice))
             iterator.close()
             break
 

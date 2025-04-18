@@ -109,7 +109,7 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
         
     return metric_list
 
-def inference(args, multimask_output, model, test_save_path=None):
+def inference(args, multimask_output, model, logger, test_save_path=None):
     data_fd_list = ['0035', '0036', '0037', '0038', '0039', '0040']
     
     model.eval()
@@ -151,18 +151,18 @@ def inference(args, multimask_output, model, test_save_path=None):
                                         test_save_path=test_save_path, case=case_name)
         
         metric_list.append(np.array(metric_i))
-        logging.info('idx %d case %s mean_dice %f' % (
+        logger.info('idx %d case %s mean_dice %f' % (
             1, case_name, np.nanmean(metric_i, axis=0)))
     
     metric_list = np.nanmean(metric_list, axis=0)
     for i in range(1, args.num_classes + 1):
-        logging.info('Mean class %d name %s mean_dice %f' % (i, class_to_name[i], metric_list[i - 1]))
+        logger.info('Mean class %d name %s mean_dice %f' % (i, class_to_name[i], metric_list[i - 1]))
 
     performance = np.nanmean(metric_list, axis=0)
     
-    logging.info('Testing performance in best val model: mean_dice : %f ' % (performance))
-    logging.info("Testing Finished!")
-    return 1
+    logger.info('Testing performance in best val model: mean_dice : %f ' % (performance))
+    logger.info("Testing Finished!")
+    return performance
 
 def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=None):
 
