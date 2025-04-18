@@ -17,9 +17,9 @@ import PIL.ImageDraw
 import cv2
 import json
 
-HU_min, HU_max = 0, 255
-# data_mean = 50.21997497685108
-# data_std = 68.47153712416372
+HU_min, HU_max = -200, 250
+data_mean = 50.21997497685108
+data_std = 68.47153712416372
 
 def read_image(path):
     with open(path, 'rb') as file:
@@ -384,52 +384,59 @@ class dataset_reader(Dataset):
         
         self.data_dir = base_dir
 
-        with open(base_dir+'/split.json', 'r') as file:
-            data = json.load(file)
+        # with open(base_dir+'/split.json', 'r') as file:
+        #     data = json.load(file)
+
+        if split=="train":
+            df = pd.read_csv(base_dir+'/training.csv')
+            self.sample_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["image_pth"]]
+            self.masks_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["mask_pth"]]
+            self.num_classes = num_classes
         
-        train_list = data['train']
-        val_list = data['val']
-        test_list = val_list
-        if split == 'train':
-            self.sample_list = train_list
-        elif split == 'val':
-            self.sample_list = val_list
-        elif split == 'test':
-            if test_name is not None:
-                self.sample_list = test_list[test_name]
-            else:
-                self.sample_list = test_list
+        # train_list = data['train']
+        # val_list = data['val']
+        # test_list = val_list
+        # if split == 'train':
+        #     self.sample_list = train_list
+        # elif split == 'val':
+        #     self.sample_list = val_list
+        # elif split == 'test':
+        #     if test_name is not None:
+        #         self.sample_list = test_list[test_name]
+        #     else:
+        #         self.sample_list = test_list
         
-        self.num_classes = num_classes
+        # self.num_classes = num_classes
 
     def __len__(self):
         return len(self.sample_list)
 
     def __getitem__(self, idx):
-        # if self.split == "train":
+        if self.split == "train":
 
-        data = cv2.imread(self.sample_list[idx]['images'])
-        # data = np.clip(data, HU_min, HU_max)
-        
-        data = ((data-np.min(data)) / (np.max(data)-np.min(data))) 
-        h, w, c= data.shape
+            data = read_image(self.sample_list[idx])
+            data = np.clip(data, HU_min, HU_max)
+            data = (data-HU_min)/(HU_max-HU_min)*255.0
+            
+            data = np.float32(data)
+            data = (data - data_mean) / data_std
+            data = (data-data.min())/(data.max()-data.min()+0.00000001)
+            h, w, d = data.shape
 
-        data = np.float32(data) #降到只有一维
-        
-        mask = cv2.imread(self.sample_list[idx]['masks'],0)
-        mask = np.array(mask)/255
-        
-        # if self.num_classes==12:
-        #     mask[mask==13] = 12
+            data = np.float32(data)
+            
+            mask = read_image(self.masks_list[idx])
+            mask = np.float32(mask)
+            
+            if self.num_classes==12:
+                mask[mask==13] = 12
 
-        image = np.float32(data)
-        label = np.float32(mask)
+            image = np.float32(data)
+            label = np.float32(mask)
 
         sample = {'image': image, 'label': label}
-        if self.transform : #这里忘记取消test的随机变换了...
-            sample['label'] = sample['label'][:, :, np.newaxis]
+        if self.transform:
             sample = self.transform(sample)
-            sample['label'] = np.squeeze(sample['label'], axis=0)
-    
-        sample['case_name'] = self.sample_list[idx]['images'].split('/')[-2]
+
+        sample['case_name'] = self.sample_list[idx].strip('\n')
         return sample

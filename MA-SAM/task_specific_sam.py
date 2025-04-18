@@ -199,7 +199,7 @@ class ImageEncoderViT_task(nn.Module):
         self.init_layers = init_layers
         self.img_size = self.ImageEncoderViT.img_size
 
-    def forward(self, x: torch.Tensor, task_embed: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, task_embed: torch.Tensor, d_size) -> torch.Tensor:
         x = self.ImageEncoderViT.patch_embed(x)
         if self.ImageEncoderViT.pos_embed is not None:
             x = x + self.ImageEncoderViT.pos_embed
@@ -208,19 +208,127 @@ class ImageEncoderViT_task(nn.Module):
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
             if i in self.init_layers:
-                x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
+                x = self.ImageEncoderViT.blocks[i](x, task_embed[count], d_size)
                 count += 1
                 outputs.append(x)
             else:
-                x = self.ImageEncoderViT.blocks[i](x) 
-                # if i == 0:
-                #     outputs.append(x)
-            
+                x = self.ImageEncoderViT.blocks[i](x, d_size) 
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
         
-
         return outputs
+
+# transformed from MA-SAM 
+class d_Block_task(nn.Module):
+    def __init__(
+            self,
+            Block: nn.Module,
+    ):
+        super().__init__()
+        self.Block = Block
+    
+    def forward(self, x:torch.Tensor, task_embed:torch.Tensor, d_size) -> torch.Tensor:
+        b_size, hw_size = x.shape[0], x.shape[1]
+
+        # 3D adapter
+        shortcut = x
+        x = self.Block.adapter_norm(x)
+        x = self.Block.adapter_linear_down(x)
+        x = x.contiguous().view(int(b_size/d_size), d_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = self.Block.adapter_conv(x)
+        x = torch.permute(x, (0, 2, 3, 4, 1))
+        x = x.contiguous().view(b_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = self.Block.adapter_act(x)
+        x = self.Block.adapter_linear_up(x)
+        x = shortcut + x
+        # end 3D adapter
+
+        shortcut = x
+        x = self.Block.norm1(x)
+        # Window partition
+        if self.Block.window_size > 0:
+            H, W = x.shape[1], x.shape[2]
+            x, pad_hw = window_partition(x, self.Block.window_size)  # [B * num_windows, window_size, window_size, C]
+
+        x = self.Block.attn(x, task_embed)
+        # Reverse window partition
+        if self.Block.window_size > 0:
+            x = window_unpartition(x, self.Block.window_size, pad_hw, (H, W))
+
+        x = shortcut + x
+
+        # 3D adapter
+        shortcut = x
+        x = self.Block.adapter_norm_2(x)
+        x = self.Block.adapter_linear_down_2(x)
+        x = x.contiguous().view(int(b_size/d_size), d_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = self.Block.adapter_conv_2(x)
+        x = torch.permute(x, (0, 2, 3, 4, 1))
+        x = x.contiguous().view(b_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = self.Block.adapter_act_2(x)
+        x = self.Block.adapter_linear_up_2(x)
+        x = shortcut + x
+        # end 3D adapter
+
+        x = x + self.Block.mlp(self.Block.norm2(x))
+    
+
+class d_Block(nn.Module):
+    def __init__(
+            self,
+            Block: nn.Module,
+    ):
+        super().__init__()
+        self.Block = Block
+    
+    def forward(self, x:torch.Tensor, d_size) -> torch.Tensor:
+        b_size, hw_size = x.shape[0], x.shape[1]
+
+        # 3D adapter
+        shortcut = x
+        x = self.Block.adapter_norm(x)
+        x = self.Block.adapter_linear_down(x)
+        x = x.contiguous().view(int(b_size/d_size), d_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = self.Block.adapter_conv(x)
+        x = torch.permute(x, (0, 2, 3, 4, 1))
+        x = x.contiguous().view(b_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = self.Block.adapter_act(x)
+        x = self.Block.adapter_linear_up(x)
+        x = shortcut + x
+        # end 3D adapter
+
+        shortcut = x
+        x = self.Block.norm1(x)
+        # Window partition
+        if self.Block.window_size > 0:
+            H, W = x.shape[1], x.shape[2]
+            x, pad_hw = window_partition(x, self.Block.window_size)  # [B * num_windows, window_size, window_size, C]
+
+        x = self.Block.attn(x)
+        # Reverse window partition
+        if self.Block.window_size > 0:
+            x = window_unpartition(x, self.Block.window_size, pad_hw, (H, W))
+
+        x = shortcut + x
+
+        # 3D adapter
+        shortcut = x
+        x = self.Block.adapter_norm_2(x)
+        x = self.Block.adapter_linear_down_2(x)
+        x = x.contiguous().view(int(b_size/d_size), d_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = self.Block.adapter_conv_2(x)
+        x = torch.permute(x, (0, 2, 3, 4, 1))
+        x = x.contiguous().view(b_size, hw_size, hw_size, self.Block.adapter_channels)
+        x = self.Block.adapter_act_2(x)
+        x = self.Block.adapter_linear_up_2(x)
+        x = shortcut + x
+        # end 3D adapter
+
+        x = x + self.Block.mlp(self.Block.norm2(x))
 
 class Task_adapter(nn.Module):
 
@@ -528,8 +636,6 @@ class MaskDecoder_task(nn.Module):
         output_tokens = torch.cat([self.iou_tokens.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
 
-        # original_embedding = image_embeddings[0]
-        # image_embeddings = image_embeddings[1:]
         
         # Run the transforme
         for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
@@ -550,11 +656,6 @@ class MaskDecoder_task(nn.Module):
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1) 
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
-        
-        # #增补第一层的细节？
-        # hs = hs[:, :-self.num_mask_tokens, :]
-        # src = src + original_embedding.flatten(2).permute(0, 2, 1) + src0
-        # hs, src = self.last_transformer(src, pos_src, hs)
         
         
         iou_token_out = hs[:, 0, :]
@@ -688,8 +789,10 @@ class Sam_task(nn.Module):
         self.w_As = []
         self.w_Bs = []
 
-        for param in sam_model.image_encoder.parameters():
-            param.requires_grad = False
+        # lets freeze pre-trained weights
+        for k, v in sam_model.image_encoder.named_parameters():
+            if not '.adapter_' in k:
+                v.requires_grad = False
 
 
         for layer_i , blk in enumerate(sam_model.image_encoder.blocks):
@@ -716,7 +819,7 @@ class Sam_task(nn.Module):
                     w_b_linear_v,
                 )
                 blk.attn = Attention_task(blk.attn)
-                sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
+                sam_model.image_encoder.blocks[layer_i] = d_Block_task(blk)
 
                 task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
                 nn.init.normal_(task_specific_embed, std=0.02)
@@ -730,7 +833,8 @@ class Sam_task(nn.Module):
                     w_b_linear_q,
                     w_a_linear_v,
                     w_b_linear_v,
-                )  
+                )
+                sam_model.image_encoder.blocks[layer_i] = d_Block(blk)  
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
         self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
@@ -749,15 +853,15 @@ class Sam_task(nn.Module):
         return outputs
 
     def forward_train(self, batched_input, multimask_output, image_size):
-        b, h, w = batched_input.shape[0], batched_input.shape[2], batched_input.shape[3] # [b, 3, h, w]
-        batched_input = batched_input.contiguous().view(-1, 3, h, w) #[b, 3, h, w]
+        b_size, hw_size, d_size = batched_input.shape[0], batched_input.shape[-2], batched_input.shape[1] # [b, d, 3, h, w]
+        batched_input = batched_input.contiguous().view(-1, 3, hw_size, hw_size)
 
         input_images = self.sam.preprocess(batched_input)
 
         # get image and mask task_embeds
         mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
-        image_embeddings = self.sam.image_encoder(input_images, self.task_specific_embed_list) #
+        image_embeddings = self.sam.image_encoder(input_images, self.task_specific_embed_list, d_size) #
         image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
@@ -810,6 +914,7 @@ class Sam_task(nn.Module):
         neck_list_tensors = {}
         prompt_encoder_tensors = {}
         mask_decoder_tensors = {}
+        adapter_tensor = {}
 
         
         if isinstance(self, torch.nn.DataParallel) or isinstance(self, torch.nn.parallel.DistributedDataParallel):
@@ -824,9 +929,11 @@ class Sam_task(nn.Module):
                 task_adapter_tensors[key] = value
             if 'mask_decoder' in key and 'sam' not in key:
                 mask_decoder_tensors[key] = value
+            if '.adapter_' in key:
+                adapter_tensor[key] = value
         
 
-        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors}
+        merged_dict = {**a_tensors, **b_tensors,**task_embed_tensors, **task_adapter_tensors,  **neck_list_tensors, **prompt_encoder_tensors, **mask_decoder_tensors, **adapter_tensor}
         torch.save(merged_dict, filename)
     
     def load_parameters(self, filename: str) -> None:
@@ -856,6 +963,12 @@ class Sam_task(nn.Module):
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_state_dict = {k:v for k,v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_state_dict)
+
+        # load adapter
+        adapter_keys = [k for k in sam_keys if '.adapter_' in k]
+        adapter_values = [state_dict[k] for k in adapter_keys]
+        adapter_new_state_dict = {k: v for k, v in zip(adapter_keys, adapter_values)}
+        sam_dict.update(adapter_new_state_dict)
 
 
         self.load_state_dict(sam_dict)

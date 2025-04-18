@@ -201,12 +201,14 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    best_dice, _ = inference_2d(args, multimask_output, model,  low_res, logger, None)
+    best_dice, _ = inference(args, multimask_output, model,  low_res, logger, None)
 
     # best_dice = -np.inf
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
             image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
+            image_batch = image_batch.unsqueeze(2)
+            image_batch = torch.cat((image_batch, image_batch, image_batch), dim=2)
             hw_size = image_batch.shape[-1]
             label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
 
