@@ -35,7 +35,7 @@ HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
 
-
+os.environ["CUDA_VISIBLE_DEVICES"]="2,3"
 
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
@@ -244,14 +244,14 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/lr_0.0012_weight_decay_0.1/best.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/TNBC', help='The path of the dataset')
-    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/TNBC/lr_0.0012_weight_decay_0.1')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/DRIVE/lr_0.0012_weight_decay_0.1_ablation_2/epoch_299.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/STARE', help='The path of the dataset')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/STARE/lr_0.0012_weight_decay_0.1_ablation_2')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=2, help='total gpu') 
-    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/DRIVE')  
+    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/STARE')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
