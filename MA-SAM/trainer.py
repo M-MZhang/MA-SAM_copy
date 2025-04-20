@@ -249,12 +249,13 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         save_interval = 10
         if (epoch_num + 1) % save_interval == 0:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
-            try:
-                model.save_parameters(save_mode_path)
-            except:
-                model.module.save_parameters(save_mode_path)
-                # torch.save(model.module.state_dict(), save_mode_path)
-            logger.info("save model to {}".format(save_mode_path))
+            # try:
+            #     model.save_parameters(save_mode_path)
+            # except:
+            #     model.module.save_parameters(save_mode_path)
+            #     # torch.save(model.module.state_dict(), save_mode_path)
+            # logger.info("save model to {}".format(save_mode_path))
+            # only save the best one
             dice, hd = inference_2d(args, multimask_output, model,  low_res, logger, None)
             if dice > best_dice:
                 best_dice = dice
