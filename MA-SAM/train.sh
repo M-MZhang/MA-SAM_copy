@@ -1,19 +1,20 @@
 TRAINER="HSP-SAM"
 
-DATASET=("isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
+DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
 prompt_num=(1 2 4 8 16)
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
-CONFIG="lr_0.0012_weight_decay_0.1"
+CONFIG="lr_0.0008_weight_decay_0.1"
 
 for dataset in ${DATASET[@]}
+do
     for prompt in ${prompt_num[@]}
     do
         DATA_PATH="${ROOT_PATH}/${dataset}"
         OUTPUT="${OUTPUT_PATH}/${dataset}/${CONFIG}/${prompt}"
         VISUAL_PATH="/root/autodl-tmp/visualization/${TRAINER}/${dataset}"
 
-        python train.py \
+        CUDA_VISIBLE_DEVICES=0,1 python train.py \
             --num_classes=${prompt} \
             --data_path=${DATA_PATH} \
             --output=${OUTPUT} \
@@ -27,3 +28,4 @@ for dataset in ${DATASET[@]}
             --vit_name='vit_h' \
             --ckpt='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth' 
     done
+done
