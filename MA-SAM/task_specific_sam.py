@@ -441,11 +441,13 @@ class MaskDecoder_task(nn.Module):
             MaskDecoder: nn.Module,
             num_layer: int,
             transformer_dim: int,
+            num_prompts: int = 1,
     ):
         super().__init__()
         # self.MaskDecoder = MaskDecoder
         self.num_mask_tokens = MaskDecoder.num_mask_tokens
         self.num_layer = num_layer
+        self.num_prompts = num_prompts
         
         self.transformer_list = nn.ModuleList()
         
@@ -547,7 +549,7 @@ class MaskDecoder_task(nn.Module):
             else:
                 src = src + image_embeddings[i].flatten(2).permute(0, 2, 1) + src0# use other image_embedding as adapter
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
-                hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1) 
+                hs = torch.cat((hs[:, :-self.num_prompts,:], mask_tokens), dim=1) 
              
             hs, src = self.transformer_list[i](src, pos_src, hs)
         
@@ -735,7 +737,7 @@ class Sam_task(nn.Module):
                 )  
         
         sam_model.image_encoder = ImageEncoderViT_task(sam_model.image_encoder, sam_model.image_encoder.global_attn_indexes)
-        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim)
+        self.mask_decoder = MaskDecoder_task(sam_model.mask_decoder, self.global_attn_num, decoder_dim, num_prompts)
         
         self.sam = sam_model
 
