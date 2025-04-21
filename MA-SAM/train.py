@@ -27,6 +27,7 @@ parser.add_argument('--batch_size', type=int, default=20, help='batch_size per g
 parser.add_argument('--n_gpu', type=int, default=2, help='total gpu')
 parser.add_argument('--base_lr', type=float, default=0.0012, help='segmentation network learning rate')
 parser.add_argument('--weight_decay', type=float, default=0.1, help='weight decay')
+parser.add_argument('--num_prompts', type=int, default=1, help='number of prompts')
 
 parser.add_argument('--max_epochs', type=int,default=400, help='maximum epoch number to train')
 parser.add_argument('--stop_epoch', type=int, default=300, help='maximum epoch number to train')
@@ -89,7 +90,7 @@ if __name__ == "__main__":
                                                                 pixel_std=[1., 1., 1.])
 
     pkg = import_module(args.module)
-    net = pkg.Sam_task(sam, r=args.rank).cuda() 
+    net = pkg.Sam_task(sam, r=args.rank, num_prompts=args.num_prompts).cuda() 
     # net = sam.cuda()
     if args.compile:
         net = torch.compile(net)
