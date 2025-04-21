@@ -11,7 +11,7 @@ do
     OUTPUT="${OUTPUT_PATH}/${dataset}/${CONFIG}"
     VISUAL_PATH="/root/autodl-tmp/visualization/${TRAINER}/${dataset}"
 
-    python train.py \
+    CUDA_VISIBLE_DEVICES=2,3 python train.py \
         --data_path=${DATA_PATH} \
         --output=${OUTPUT} \
         --visual_path=${VISUAL_PATH} \
