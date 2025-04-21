@@ -3,7 +3,7 @@ TRAINER="HSP-SAM"
 DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
-CONFIG="lr_0.0012_weight_decay_0.1_ablation_1"
+CONFIG="lr_0.0008_weight_decay_0.1_ablation_1"
 
 
 for dataset in ${DATASET[@]}
