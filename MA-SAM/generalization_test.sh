@@ -4,7 +4,7 @@ Source_DATASET=("isic2018" "DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
 Target_DATASET=("PH2" "STARE" "CVC-ColonDB" "BUSI" "TNBC" )
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
-CONFIG="lr_0.0012_weight_decay_0.1"
+CONFIG="lr_0.0012_weight_decay_0.1_ablation_4"
 
 
 for ((i=0;i<${#Source_DATASET[@]};i++))

@@ -1,6 +1,6 @@
 TRAINER="HSP-SAM"
-
-DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
+DATASET="isic2018"
+# DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" "isic2018")
 # DATASET="dsb-2018"
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
@@ -14,7 +14,7 @@ do
     adapt_ckpt="${OUTPUT}/best.pth"
     VISUAL_PATH="/root/autodl-tmp/visualization/${TRAINER}/${dataset}"
 
-    CUDA_VISIBLE_DEVICES=4,5 python test.py \
+    CUDA_VISIBLE_DEVICES=2,3 python test.py \
         --data_path=${DATA_PATH} \
         --output_dir=${OUTPUT} \
         --visual_path=${VISUAL_PATH} \
