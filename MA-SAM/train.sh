@@ -23,7 +23,7 @@ do
             --num_classes=1 \
             --batch_size=20 \
             --n_gpu=2 \
-            --base_lr=0.0012 \
+            --base_lr=0.0008 \
             --weight_decay=0.1 \
             --vit_name='vit_h' \
             --ckpt='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth' 
