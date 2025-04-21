@@ -15,12 +15,12 @@ do
         VISUAL_PATH="/root/autodl-tmp/visualization/${TRAINER}/${dataset}"
 
         CUDA_VISIBLE_DEVICES=0,1 python train.py \
-            --num_classes=${prompt} \
+            --num_classes=1 \
             --data_path=${DATA_PATH} \
             --output=${OUTPUT} \
             --visual_path=${VISUAL_PATH} \
             --root_path=${DATA_PATH} \
-            --num_classes=${prompt} \
+            --num_prompts=${prompt} \
             --batch_size=20 \
             --n_gpu=2 \
             --base_lr=0.0008 \
