@@ -1,6 +1,6 @@
 TRAINER="HSP-SAM"
-# DATASET="DRIVE"
-DATASET=("isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018")
+DATASET="DRIVE"
+# DATASET=("DRIVE" "isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018")
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
 CONFIG="lr_0.0008_weight_decay_0.1_ablation_1"
@@ -11,7 +11,7 @@ do
     OUTPUT="${OUTPUT_PATH}/${dataset}/${CONFIG}"
     VISUAL_PATH="/root/autodl-tmp/visualization/${TRAINER}/${dataset}"
 
-    CUDA_VISIBLE_DEVICES=2,3 python train.py \
+    python train.py \
         --data_path=${DATA_PATH} \
         --output=${OUTPUT} \
         --visual_path=${VISUAL_PATH} \
