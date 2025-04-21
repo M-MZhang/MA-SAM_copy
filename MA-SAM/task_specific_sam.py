@@ -649,6 +649,7 @@ class Sam_task(nn.Module):
         sam_model: Sam,
         r: int,
         lora_layer = None,
+        num_prompts: int = 1,
     ) -> None:
         """
         SAM predicts object masks from an image and input prompts.
@@ -670,9 +671,10 @@ class Sam_task(nn.Module):
         image_encoder_dim = sam_model.image_encoder.pos_embed.shape[3]
         image_size = sam_model.image_encoder.pos_embed.shape[1] * 16 # vit_b: 32*16 = 512
         self.global_attn_num = len(sam_model.image_encoder.global_attn_indexes) # 4
-        num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
+        # num_mask_tokens = sam_model.mask_decoder.num_mask_tokens
+        num_prompt_tokens = num_prompts
         
-        self.task_adapter = Mask_adapter(num_mask_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
+        self.task_adapter = Mask_adapter(num_prompt_tokens, image_encoder_dim, decoder_dim, self.global_attn_num)
         self.Neck_list = Neck(sam_model.image_encoder, image_encoder_dim, decoder_dim, self.global_attn_num)
         
         self.task_specific_embed_list = nn.ParameterList()
@@ -718,7 +720,7 @@ class Sam_task(nn.Module):
                 blk.attn = Attention_task(blk.attn)
                 sam_model.image_encoder.blocks[layer_i] = Block_task(blk)
 
-                task_specific_embed = torch.empty(num_mask_tokens, image_encoder_dim) #[task_num, encoder_dim]
+                task_specific_embed = torch.empty(num_prompt_tokens, image_encoder_dim) #[task_num, encoder_dim]
                 nn.init.normal_(task_specific_embed, std=0.02)
                 task_specific_embed = nn.Parameter(task_specific_embed)
                 self.task_specific_embed_list.append(task_specific_embed)
