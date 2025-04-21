@@ -20,7 +20,7 @@ do
             --output=${OUTPUT} \
             --visual_path=${VISUAL_PATH} \
             --root_path=${DATA_PATH} \
-            --num_classes=1 \
+            --num_classes=${prompt} \
             --batch_size=20 \
             --n_gpu=2 \
             --base_lr=0.0008 \
