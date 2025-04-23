@@ -256,7 +256,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             #     # torch.save(model.module.state_dict(), save_mode_path)
             # logger.info("save model to {}".format(save_mode_path))
             # 除了最佳的不保存
-            logger.infor("This is the {} epoch".format(epoch_num))
+            logger.info("This is the {} epoch".format(epoch_num))
             dice, hd = inference_2d(args, multimask_output, model,  low_res, logger, None)
             if dice > best_dice:
                 best_dice = dice

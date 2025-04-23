@@ -252,6 +252,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=2, help='total gpu') 
     parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/DRIVE')  
+    parser.add_argument('--num_prompts', type=int, default=1, help='number of prompts')
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
@@ -284,7 +285,7 @@ if __name__ == '__main__':
                                                                 pixel_std=[1., 1., 1.])
     
     pkg = import_module(args.module)
-    net = pkg.Sam_task(sam, r=32).cuda() 
+    net = pkg.Sam_task(sam, r=32, num_prompts=args.num_prompts).cuda() 
     # net = sam.cuda()
 
     assert args.adapt_ckpt is not None
@@ -332,5 +333,5 @@ if __name__ == '__main__':
     #     logger.info('Loading checkpoint from {}'.format(adpt_ckpt))
     #     assert args.adapt_ckpt is not None
     #     net.load_parameters(adpt_ckpt)
-    _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
+    dice, _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
 
