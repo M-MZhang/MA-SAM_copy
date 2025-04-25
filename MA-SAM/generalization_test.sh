@@ -4,7 +4,7 @@ Source_DATASET=("DRIVE" "isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
 Target_DATASET=("STARE" "PH2" "CVC-ColonDB" "BUSI" "TNBC" )
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
-CONFIG="lr_0.0012_weight_decay_0.1"
+CONFIG="lr_0.0008_weight_decay_0.1_augmentation_True"
 
 
 for ((i=0;i<${#Source_DATASET[@]};i++))
@@ -14,7 +14,7 @@ do
     OUTPUT="${OUTPUT_PATH}/${Target_DATASET[i]}/${CONFIG}"
     VISUAL_PATH="/root/autodl-tmp/visualization/${TRAINER}/${Target_DATASET[i]}"
 
-    python test.py \
+    CUDA_VISIBLE_DEVICES=0,1 python test.py \
         --data_path=${DATA_PATH} \
         --output_dir=${OUTPUT} \
         --visual_path=${VISUAL_PATH} \
