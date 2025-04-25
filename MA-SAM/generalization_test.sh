@@ -1,7 +1,7 @@
 TRAINER="HSP-SAM"
 
-Source_DATASET=("DRIVE" "isic2018" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
-Target_DATASET=("STARE" "PH2" "CVC-ColonDB" "BUSI" "TNBC" )
+Source_DATASET=("DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
+Target_DATASET=("STARE" "CVC-ColonDB" "BUSI" "TNBC" )
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
 CONFIG="lr_0.0008_weight_decay_0.1"
@@ -13,7 +13,7 @@ do
     for prompt in ${prompt_num[@]}
     do
     DATA_PATH="${ROOT_PATH}/${Target_DATASET[i]}"
-    adapt_ckpt="${OUTPUT_PATH}/${Source_DATASET[i]}/${CONFIG}/best.pth"
+    adapt_ckpt="${OUTPUT_PATH}/${Source_DATASET[i]}/${CONFIG}/${prompt}/best.pth"
     OUTPUT="${OUTPUT_PATH}/${Target_DATASET[i]}/${CONFIG}"/${prompt}
     VISUAL_PATH="/root/autodl-tmp/visualization/${TRAINER}/${Target_DATASET[i]}"
 
