@@ -11,6 +11,9 @@ from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 from importlib import import_module
 from segment_anything import sam_model_registry
+from torch.nn.modules.loss import CrossEntropyLoss
+from utils import DiceLoss
+from PIL import Image
 
 from icecream import ic
 import pandas as pd
@@ -18,18 +21,31 @@ import pickle
 from datetime import datetime
 from einops import repeat
 from scipy.ndimage import zoom
-from utils import calculate_metric_percase
+from utils import calculate_metric_percase, write_json, HD_Score
 import nibabel as nib
 
+<<<<<<< HEAD
 from datasets.dataset import dataset_reader, RandomGenerator
 from torchvision import transforms
 import json
+=======
+from datasets.dataset import dataset_reader, test_transform
+from torchvision import transforms
+import json
+from torch import nn
+
+# from mindspore.nn.metrics import HausdorffDistance
+>>>>>>> 7af3e98 (ft-sam)
 
 HU_min, HU_max = -200, 250
 data_mean = 50.21997497685108
 data_std = 68.47153712416372
 
+<<<<<<< HEAD
 os.environ['PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT'] = '1.0'
+=======
+
+>>>>>>> 7af3e98 (ft-sam)
 
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
@@ -104,16 +120,24 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
     return metric_list
 
 def inference(args, multimask_output, model, test_save_path=None):
+<<<<<<< HEAD
     data_fd_list = pd.read_csv('/root/data1/zmm/seg4medicine/data/synapseCT/Training/2D_all_5slice'+'/test.csv')
     data_fd_list = data_fd_list["image_pth"]
     data_fd_list = [data_fd.split("/")[-3] for data_fd in data_fd_list]
     data_fd_list = list(set(data_fd_list))
     data_fd_list.sort()
+=======
+    data_fd_list = ['0035', '0036', '0037', '0038', '0039', '0040']
+>>>>>>> 7af3e98 (ft-sam)
     
     model.eval()
     metric_list = []
     for data_fd in tqdm(data_fd_list):
+<<<<<<< HEAD
         image_file_path = args.data_path+'/'+'npy/images/'+'img'+str(data_fd)
+=======
+        image_file_path = args.data_path +'/npy_new'+'/img'+str(data_fd)+'/images'
+>>>>>>> 7af3e98 (ft-sam)
         image_file_list = os.listdir(image_file_path)
         image_file_list.sort()
         image_arr_list = []
@@ -121,7 +145,11 @@ def inference(args, multimask_output, model, test_save_path=None):
         for image_file in image_file_list:
             with open(image_file_path + '/' + image_file, 'rb') as file:
                 image_arr = pickle.load(file)
+<<<<<<< HEAD
             with open(args.data_path+'/'+'npy/masks/'+'img'+str(data_fd)+'/'+image_file, 'rb') as file:
+=======
+            with open(args.data_path + '/npy_new'+'/img'+str(data_fd)+'/masks/'+image_file, 'rb') as file:
+>>>>>>> 7af3e98 (ft-sam)
                 mask_arr = pickle.load(file)
 
             image_arr = np.clip(image_arr, HU_min, HU_max)
@@ -162,6 +190,73 @@ def inference(args, multimask_output, model, test_save_path=None):
     logging.info("Testing Finished!")
     return 1
 
+def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=None):
+
+    hd_score = HD_Score(n_classes=args.num_classes+1)
+    # hd_metric = HausdorffDistance()
+    # if args.n_gpu > 1:
+    #     model = nn.DataParallel(model)
+    model.eval()
+    db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
+                            transform=transforms.Compose([test_transform(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
+                            test_name=None)
+
+    print("The length of test set is: {}".format(len(db_test)))
+    
+    batch_size = args.batch_size * args.n_gpu
+    # batch_size = 1
+    def worker_init_fn(worker_id):
+        random.seed(args.seed + worker_id)
+
+    testdataloader = DataLoader(db_test, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True,
+                            worker_init_fn=worker_init_fn, drop_last=False)
+
+    hd = []
+    dice = 0
+    num_test = 0
+    h_num = 0
+    for i_batch, sampled_batch in enumerate(testdataloader):
+       
+        image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
+        hw_size = image_batch.shape[-1]
+        label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
+
+        image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
+        
+        with torch.no_grad():
+            outputs = model(image_batch, multimask_output, args.img_size)
+            low_res_logits = outputs['low_res_logits']
+            
+            out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+            h = hd_score(out, label_batch)
+            if h != float("inf") and np.isnan(h) == False:
+                hd.append(h)
+            
+            out = out.cpu().detach().numpy()
+            label_batch = label_batch.cpu().detach().numpy()
+            dice += calculate_metric_percase(out, label_batch) * label_batch.shape[0]
+            num_test += image_batch.shape[0]
+
+            #可视化一下
+            if i_batch <10 :
+                img = Image.fromarray(np.array(out[0]*255).squeeze().astype(np.uint8))
+                img.save(os.path.join(args.visual_path, str(i_batch)+'.png'))
+                label = Image.fromarray(np.array(label_batch[0]*255).squeeze().astype(np.uint8))
+                label.save(os.path.join(args.visual_path,str(i_batch)+'_label.png'))
+
+            
+    hd = round(np.mean(hd), 4)
+    dice = dice / num_test
+
+    logger.info("DICE:{}, HD:{}".format(dice, hd))
+    
+    loss = {'DICE':dice, 'HD': hd}
+    if test_save_path is not None:
+        write_json(loss, test_save_path+'/result.json')
+    print("Finish test haha!")
+    return dice
+    
+
 
 def config_to_dict(config):
     items_dict = {}
@@ -175,20 +270,35 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+<<<<<<< HEAD
     parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/ft-sam/epoch_99.pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
     
     parser.add_argument('--num_classes', type=int, default=12)
+=======
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/lr_0.0012_weight_decay_0.1/best.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/TNBC', help='The path of the dataset')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/TNBC/lr_0.0012_weight_decay_0.1')
+    parser.add_argument('--num_classes', type=int, default=1)
+>>>>>>> 7af3e98 (ft-sam)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
+    parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
+    parser.add_argument('--n_gpu', type=int, default=2, help='total gpu') 
+    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/DRIVE')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
+<<<<<<< HEAD
     parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_b_01ec64.pth', help='Pretrained checkpoint')
     parser.add_argument('--vit_name', type=str, default='vit_b', help='Select one vit model')
+=======
+    parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
+    parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
+>>>>>>> 7af3e98 (ft-sam)
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
-    parser.add_argument('--module', type=str, default='sam_fact_tt_image_encoder')
+    parser.add_argument('--module', type=str, default='task_specific_sam')
 
     args = parser.parse_args()
 
@@ -198,14 +308,18 @@ if __name__ == '__main__':
     else:
         cudnn.benchmark = False
         cudnn.deterministic = True
+    
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     
+<<<<<<< HEAD
     args.output_dir = args.adapt_ckpt[:-2]
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
+=======
+>>>>>>> 7af3e98 (ft-sam)
 
     # register model
     sam, img_embedding_size = sam_model_registry[args.vit_name](image_size=args.img_size,
@@ -214,6 +328,7 @@ if __name__ == '__main__':
                                                                 pixel_std=[1., 1., 1.])
     
     # pkg = import_module(args.module)
+<<<<<<< HEAD
     # net = pkg.Fact_tt_Sam(sam, args.rank, s=args.scale).cuda()
     net = sam.cuda()
 
@@ -221,12 +336,22 @@ if __name__ == '__main__':
     # net.load_parameters(args.adapt_ckpt)
     state_dict = torch.load(args.adapt_ckpt)
     net.load_state_dict(state_dict)
+=======
+    # net = pkg.Sam_task(sam, r=32).cuda() 
+    net = sam.cuda()
+
+    # assert args.adapt_ckpt is not None
+    # net.load_parameters(args.adapt_ckpt)
+    # net.load_state_dict(torch.load(args.adapt_ckpt))
+   
+>>>>>>> 7af3e98 (ft-sam)
 
     if args.num_classes > 1:
         multimask_output = True
     else:
         multimask_output = False
 
+<<<<<<< HEAD
     # initialize log
     log_folder = os.path.join(args.output_dir, 'test_log')
     os.makedirs(log_folder, exist_ok=True)
@@ -239,8 +364,42 @@ if __name__ == '__main__':
     logging.info(str(args))
 
     # args.is_savenii = False #暂时不保存可视化的东西
+=======
+    # initialize log_folder
+    log_folder = os.path.join(args.output_dir, 'testing_log')
+    if not os.path.exists(log_folder):
+        os.makedirs(log_folder)
+    if not os.path.exists(args.visual_path):
+        os.makedirs(args.visual_path)
+
+    # time
+    output_filename = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+    logger = logging.getLogger('my_logger')
+    logger.setLevel(logging.INFO)
+
+    # 2. 创建文件处理器
+    file_handler = logging.FileHandler(filename=log_folder+'/'+args.adapt_ckpt.split('/')[-1] +'_log.txt')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+    
+
+    logger.info(str(args))
+    
+>>>>>>> 7af3e98 (ft-sam)
     if args.is_savenii:
-        test_save_path = args.output_dir
+        test_save_path = log_folder
     else:
         test_save_path = None
-    inference(args, multimask_output, net, test_save_path)
+
+    low_res = img_embedding_size * 4
+   
+    # epoch_list = np.arange(9, 300, 10)
+    # for epoch in epoch_list:
+    #     adpt_ckpt = args.adapt_ckpt.replace('best.pth', 'epoch_{}.pth'.format(epoch))
+    #     logger.info('Loading checkpoint from {}'.format(adpt_ckpt))
+    #     assert args.adapt_ckpt is not None
+    #     net.load_parameters(adpt_ckpt)
+    _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
+

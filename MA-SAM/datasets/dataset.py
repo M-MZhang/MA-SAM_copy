@@ -17,13 +17,14 @@ import PIL.ImageDraw
 import cv2
 import json
 
-HU_min, HU_max = -200, 250
-data_mean = 50.21997497685108
-data_std = 68.47153712416372
+HU_min, HU_max = 0, 255
+# data_mean = 50.21997497685108
+# data_std = 68.47153712416372
 
 def read_image(path):
     with open(path, 'rb') as file:
-        img = pickle.load(file)
+        # img = pickle.load(file)
+        img = cv2.imread(path)
         return img
 
 def random_rot_flip(image, label):
@@ -351,18 +352,47 @@ class RandomGenerator(object):
         sample = {'image': image, 'label': label.long(), 'low_res_label': low_res_label.long()}
         return sample
 
+class test_transform(object):
+    def __init__(self, output_size, low_res):
+        self.output_size = output_size
+        self.low_res = low_res
+    
+    def __call__(self,sample):
+        
+        image, label = sample['image'], sample['label']
+        x, y, z = image.shape
+        if x != self.output_size[0] or y != self.output_size[1]:
+            image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y, 1.0), order=3)
+            label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y, 1.0), order=0)
+        label_h, label_w, label_d = label.shape
+        low_res_label = zoom(label, (self.low_res[0] / label_h, self.low_res[1] / label_w, 1.0), order=0)
+        
+        image = torch.from_numpy(image.astype(np.float32))
+        label = torch.from_numpy(label.astype(np.float32))
+        low_res_label = torch.from_numpy(low_res_label.astype(np.float32))
+        image = image.permute(2, 0, 1)
+        label = label.permute(2, 0, 1)
+        low_res_label = low_res_label.permute(2, 0, 1)
+        
+        sample = {'image': image, 'label': label.long(), 'low_res_label': low_res_label.long()}
+        return sample
+
 
 class dataset_reader(Dataset):
-    def __init__(self, base_dir, split, num_classes, transform=None):
+    def __init__(self, base_dir, split, num_classes, transform=None, test_name=None):
         self.transform = transform 
         self.split = split
         
         self.data_dir = base_dir
 
+<<<<<<< HEAD
         # df = pd.read_csv(base_dir+'/training.csv')
         # self.sample_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["image_pth"]]
         # self.masks_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["mask_pth"]]
         with open(base_dir+'/npy_new.json', 'r') as file:
+=======
+        with open(base_dir+'/split.json', 'r') as file:
+>>>>>>> 7af3e98 (ft-sam)
             data = json.load(file)
         
         train_list = data['train']
@@ -373,7 +403,14 @@ class dataset_reader(Dataset):
         elif split == 'val':
             self.sample_list = val_list
         elif split == 'test':
+<<<<<<< HEAD
             self.sample_list = test_list
+=======
+            if test_name is not None:
+                self.sample_list = test_list[test_name]
+            else:
+                self.sample_list = test_list
+>>>>>>> 7af3e98 (ft-sam)
         
         self.num_classes = num_classes
 
@@ -381,8 +418,9 @@ class dataset_reader(Dataset):
         return len(self.sample_list)
 
     def __getitem__(self, idx):
-        if self.split == "train":
+        # if self.split == "train":
 
+<<<<<<< HEAD
             data = read_image(self.sample_list[idx]['images'])
             data = np.clip(data, HU_min, HU_max)
             data = (data-HU_min)/(HU_max-HU_min)*255.0
@@ -399,9 +437,26 @@ class dataset_reader(Dataset):
             
             if self.num_classes==12:
                 mask[mask==13] = 12
+=======
+        data = cv2.imread(self.sample_list[idx]['images'])
+        # data = np.clip(data, HU_min, HU_max)
+        
+        data = ((data-np.min(data)) / (np.max(data)-np.min(data))) 
+        h, w, c= data.shape
 
-            image = np.float32(data)
-            label = np.float32(mask)
+        data = np.float32(data) #降到只有一维
+        
+        mask = cv2.imread(self.sample_list[idx]['masks'],0)
+        mask = np.array(mask)/255
+        
+        # if self.num_classes==12:
+        #     mask[mask==13] = 12
+>>>>>>> 7af3e98 (ft-sam)
+
+        image = np.float32(data)
+        label = np.float32(mask)
+
+    
 
         sample = {'image': image, 'label': label}
         if self.transform:

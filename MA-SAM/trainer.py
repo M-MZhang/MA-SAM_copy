@@ -14,18 +14,26 @@ from torch.nn.modules.loss import CrossEntropyLoss
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from tqdm import tqdm
-from utils import DiceLoss
+from utils import DiceLoss, Focal_loss
 from torchvision import transforms
 from icecream import ic
 from datetime import datetime
+<<<<<<< HEAD
 from test import inference
+=======
+from test import inference, inference_2d
+>>>>>>> 7af3e98 (ft-sam)
 from torch.optim.lr_scheduler import _LRScheduler
 
 # os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
 
-def calc_loss(outputs, low_res_label_batch, ce_loss, dice_loss, dice_weight:float=0.8):
+
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1' 
+
+def calc_loss(outputs, low_res_label_batch, ce_loss, focal_loss, dice_loss, dice_weight:float=0.8):
     low_res_logits = outputs['low_res_logits']
     loss_ce = ce_loss(low_res_logits, low_res_label_batch[:].long())
+    # loss_focal = focal_loss(low_res_logits, low_res_label_batch)
     loss_dice = dice_loss(low_res_logits, low_res_label_batch, softmax=True)
     loss = (1 - dice_weight) * loss_ce + dice_weight * loss_dice
     return loss, loss_ce, loss_dice
@@ -106,16 +114,39 @@ class LinearWarmupScheduler(_BaseWarmupScheduler):
 def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     from datasets.dataset import dataset_reader, RandomGenerator
     
-    output_filename = datetime.now().strftime("%Y%m%d-%H%M%S")
+   
     
+    if not os.path.exists(args.output + '/training_log'): # 换到外面去存储
+        os.mkdir(args.output + '/training_log')
+    # time
+    output_filename = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+    # logging.basicConfig(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_'+ output_filename + '_log.txt', level=logging.INFO,
+    #                     format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
+    logger = logging.getLogger('my_logger')
+    logger.setLevel(logging.INFO)
+
+    # 2. 创建文件处理器
+    file_handler = logging.FileHandler(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_'+ output_filename + '_log.txt')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+
+    
+    logger.info(str(args))
+    
+    
+<<<<<<< HEAD
     if not os.path.exists('/root/data1/zmm/seg4medicine/save/Vanille_me_v3/training_log'): # 换到外面去存储
         os.mkdir('/root/data1/zmm/seg4medicine/save/Vanille_me_v3/training_log')
     logging.basicConfig(filename= '/root/data1/zmm/seg4medicine/save/Vanille_me_v3/training_log/' + args.output.split('/')[-1] + '_log.txt', level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
+=======
+>>>>>>> 7af3e98 (ft-sam)
     base_lr = args.base_lr
-    num_classes = args.num_classes
+    num_classes = args.num_classes 
     batch_size = args.batch_size * args.n_gpu
     
     db_train = dataset_reader(base_dir=args.root_path, split="train", num_classes=args.num_classes, 
@@ -125,6 +156,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
+<<<<<<< HEAD
     trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True,
                              worker_init_fn=worker_init_fn)
     
@@ -147,25 +179,47 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         if "mask_decoder" in name:
             para.requires_grad_(True)
             num += para.numel()
+=======
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
+                             worker_init_fn=worker_init_fn, drop_last=False) # 这个drop_last好像会有点什么问题？
+    
+    num = 0
+    for name, para in model.named_parameters():
+        # only train the mask decoder
+        if "mask_decoder" in name:
+            para.requires_grad_(True)
+            num += para.numel()
+        else:  
+            para.requires_grad_(False)
+            
+>>>>>>> 7af3e98 (ft-sam)
     
     # varify the trainable parameters
     for name, para in model.named_parameters():
         if para.requires_grad:
             print(name)
+<<<<<<< HEAD
     logging.info("The number of trainable parameters is {}M".format(num/1000000))
 
     # model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
+=======
+            logger.info(name)
+    logger.info("The number of trainable parameters is {}M".format(num/1000000))
+
+>>>>>>> 7af3e98 (ft-sam)
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
     model.train()
     ce_loss = CrossEntropyLoss(ignore_index=-100)
+    focal_loss = Focal_loss(alpha=0.1, num_classes=num_classes + 1, gamma=5)
     dice_loss = DiceLoss(num_classes + 1)
     if args.warmup:
         b_lr = base_lr / args.warmup_period
     else:
         b_lr = base_lr
     if args.AdamW:
+<<<<<<< HEAD
         optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.01)
     else:
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
@@ -182,18 +236,29 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     #             1e-5
     #         )
     
+=======
+        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=args.weight_decay)
+        # optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.1)
+    else:
+        optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
+    if args.use_amp:
+        # scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
+        scaler = torch.amp.GradScaler(enabled=args.use_amp)
+
+   
+>>>>>>> 7af3e98 (ft-sam)
     writer = SummaryWriter(snapshot_path + '/log')
     iter_num = 0
     max_epoch = args.max_epochs
     stop_epoch = args.stop_epoch
     max_iterations = args.max_epochs * len(trainloader)
-    logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
+    logger.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
     
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    # inference(args, multimask_output, model, None)
-    
+    best_dice = inference_2d(args, multimask_output, model,  low_res, logger, None)
+
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
             image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
@@ -207,7 +272,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             if args.use_amp:
                 with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=args.use_amp):
                     outputs = model(image_batch, multimask_output, args.img_size)
-                    loss, loss_ce, loss_dice = calc_loss(outputs, label_batch, ce_loss, dice_loss, args.dice_param)
+                    loss, loss_ce, loss_dice = calc_loss(outputs, label_batch, ce_loss, focal_loss, dice_loss, args.dice_param)
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
@@ -224,6 +289,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
                 else:
                     shift_iter = iter_num
                 lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** args.lr_exp
+                # lr_ = base_lr * (1.0 - shift_iter / max_iterations) ** 0.9
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_
             # lr = scheduler.get_last_lr()
@@ -233,27 +299,57 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             writer.add_scalar('info/loss_ce', loss_ce, iter_num)
             writer.add_scalar('info/loss_dice', loss_dice, iter_num)
 
+<<<<<<< HEAD
             logging.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f, lr: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item(),lr_))
+=======
+            logger.info('iteration %d : loss : %f, loss_ce: %f, loss_dice: %f, lr: %f' % (iter_num, loss.item(), loss_ce.item(), loss_dice.item(),lr_))
+>>>>>>> 7af3e98 (ft-sam)
 
         save_interval = 10
         if (epoch_num + 1) % save_interval == 0:
             # inference(args, multimask_output, model, None)
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
+<<<<<<< HEAD
             try:
                 model.save_parameters(save_mode_path)
             except:
                 # model.module.save_parameters(save_mode_path)
                 torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
+=======
+            # try:
+            #     model.save_parameters(save_mode_path)
+            # except:
+            #     model.module.save_parameters(save_mode_path)
+            #     # torch.save(model.module.state_dict(), save_mode_path)
+            # logger.info("save model to {}".format(save_mode_path))
+            # save the best only
+            dice = inference_2d(args, multimask_output, model,  low_res, logger, None)
+            if dice > best_dice:
+                best_dice = dice
+                save_mode_path = os.path.join(snapshot_path, 'best.pth')
+                try:
+                    model.save_parameters(save_mode_path)
+                except:
+                    model.module.save_parameters(save_mode_path)
+                    # torch.save(model.module.state_dict(), save_mode_path)
+                logger.info("save best model {} to {}".format('epoch_' + str(epoch_num) , save_mode_path))
+>>>>>>> 7af3e98 (ft-sam)
 
         if epoch_num >= max_epoch - 1 or epoch_num >= stop_epoch - 1:
             save_mode_path = os.path.join(snapshot_path, 'epoch_' + str(epoch_num) + '.pth')
             try:
                 model.save_parameters(save_mode_path)
             except:
+<<<<<<< HEAD
                 # model.module.save_parameters(save_mode_path)
                 torch.save(model.module.state_dict(), save_mode_path)
             logging.info("save model to {}".format(save_mode_path))
+=======
+                model.module.save_parameters(save_mode_path)
+                # torch.save(model.module.state_dict(), save_mode_path)
+            logger.info("save model to {}".format(save_mode_path))
+>>>>>>> 7af3e98 (ft-sam)
             iterator.close()
             break
 
