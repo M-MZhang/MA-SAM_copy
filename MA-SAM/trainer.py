@@ -114,14 +114,10 @@ class LinearWarmupScheduler(_BaseWarmupScheduler):
 def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     from datasets.dataset import dataset_reader, RandomGenerator
     
-   
-    
     if not os.path.exists(args.output + '/training_log'): # 换到外面去存储
         os.mkdir(args.output + '/training_log')
     # time
     output_filename = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    # logging.basicConfig(filename= args.output + '/training_log/' + args.output.split('/')[-1] + '_'+ output_filename + '_log.txt', level=logging.INFO,
-    #                     format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logger = logging.getLogger('my_logger')
     logger.setLevel(logging.INFO)
 
@@ -186,11 +182,12 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     num = 0
     for name, para in model.named_parameters():
         # only train the mask decoder
-        if "mask_decoder" in name:
-            para.requires_grad_(True)
-            num += para.numel()
-        else:  
-            para.requires_grad_(False)
+        if 'image_encoder' not in name:
+            if "mask_decoder" in name:
+                para.requires_grad_(True)
+                num += para.numel()
+            else:  
+                para.requires_grad_(False)
             
 >>>>>>> 7af3e98 (ft-sam)
     
@@ -198,15 +195,11 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     for name, para in model.named_parameters():
         if para.requires_grad:
             print(name)
-<<<<<<< HEAD
+
     logging.info("The number of trainable parameters is {}M".format(num/1000000))
 
     # model.init_weights() # 将加入到image_encoder中的adapter_mlp层最后一层的参数初始化为0
-=======
-            logger.info(name)
-    logger.info("The number of trainable parameters is {}M".format(num/1000000))
 
->>>>>>> 7af3e98 (ft-sam)
 
     if args.n_gpu > 1:
         model = nn.DataParallel(model)
@@ -219,34 +212,15 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     else:
         b_lr = base_lr
     if args.AdamW:
-<<<<<<< HEAD
+
         optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.01)
     else:
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
     if args.use_amp:
         scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
 
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    #         optimizer, float(args.max_epochs)
-    #     )
-    
-    # if args.warmup:
-    #     scheduler = ConstantWarmupScheduler(
-    #             optimizer, scheduler, args.warmup_period,
-    #             1e-5
-    #         )
-    
-=======
-        optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=args.weight_decay)
-        # optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, betas=(0.9, 0.999), weight_decay=0.1)
-    else:
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
-    if args.use_amp:
-        # scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
-        scaler = torch.amp.GradScaler(enabled=args.use_amp)
 
-   
->>>>>>> 7af3e98 (ft-sam)
+
     writer = SummaryWriter(snapshot_path + '/log')
     iter_num = 0
     max_epoch = args.max_epochs

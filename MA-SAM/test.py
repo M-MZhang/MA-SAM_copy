@@ -193,9 +193,6 @@ def inference(args, multimask_output, model, test_save_path=None):
 def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=None):
 
     hd_score = HD_Score(n_classes=args.num_classes+1)
-    # hd_metric = HausdorffDistance()
-    # if args.n_gpu > 1:
-    #     model = nn.DataParallel(model)
     model.eval()
     db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
                             transform=transforms.Compose([test_transform(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
@@ -271,6 +268,7 @@ def config_to_dict(config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 <<<<<<< HEAD
+<<<<<<< HEAD
     parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/ft-sam/epoch_99.pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
     
@@ -279,12 +277,17 @@ if __name__ == '__main__':
     parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/lr_0.0012_weight_decay_0.1/best.pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/TNBC', help='The path of the dataset')
     parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/TNBC/lr_0.0012_weight_decay_0.1')
+=======
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/Ft-SAM/UDIAT/test/best.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/UDIAT', help='The path of the dataset')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/Ft-SAM/UDIAT/lr_0.0008_weight_decay_0.1')
+>>>>>>> 6682c16 (ft-sam)
     parser.add_argument('--num_classes', type=int, default=1)
 >>>>>>> 7af3e98 (ft-sam)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=2, help='total gpu') 
-    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/DRIVE')  
+    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/UDIAT')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
@@ -298,7 +301,7 @@ if __name__ == '__main__':
 >>>>>>> 7af3e98 (ft-sam)
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
-    parser.add_argument('--module', type=str, default='task_specific_sam')
+    parser.add_argument('--module', type=str, default='ft_sam')
 
     args = parser.parse_args()
 
@@ -327,6 +330,7 @@ if __name__ == '__main__':
                                                                     checkpoint=args.ckpt, pixel_mean=[0., 0., 0.],
                                                                 pixel_std=[1., 1., 1.])
     
+<<<<<<< HEAD
     # pkg = import_module(args.module)
 <<<<<<< HEAD
     # net = pkg.Fact_tt_Sam(sam, args.rank, s=args.scale).cuda()
@@ -345,6 +349,14 @@ if __name__ == '__main__':
     # net.load_state_dict(torch.load(args.adapt_ckpt))
    
 >>>>>>> 7af3e98 (ft-sam)
+=======
+    pkg = import_module(args.module)
+    net = pkg.Ft_Sam(sam, r=32).cuda() 
+
+
+    # assert args.adapt_ckpt is not None
+    net.load_parameters(args.adapt_ckpt)
+>>>>>>> 6682c16 (ft-sam)
 
     if args.num_classes > 1:
         multimask_output = True

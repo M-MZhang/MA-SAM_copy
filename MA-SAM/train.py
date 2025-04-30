@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 
 from importlib import import_module
 
-from sam_fact_tt_image_encoder import Fact_tt_Sam
+from ft_sam import Ft_Sam
 from segment_anything import sam_model_registry
 
 from trainer import trainer_run
@@ -56,7 +56,7 @@ parser.add_argument('--scale', type=float, default=1.0, help='Scale for FacT')
 parser.add_argument('--warmup', action='store_true', help='If activated, warp up the learning from a lower lr to the base_lr')
 parser.add_argument('--warmup_period', type=int, default=100, help='Warp up iterations, only valid when warmup is activated')
 parser.add_argument('--AdamW', action='store_true', help='If activated, use AdamW to finetune SAM model')
-parser.add_argument('--module', type=str, default='task_specific_sam')
+parser.add_argument('--module', type=str, default='ft_sam')
 parser.add_argument('--dice_param', type=float, default=0.8)
 parser.add_argument('--lr_exp', type=float, default=2, help='The learning rate decay expotential')
 
@@ -105,6 +105,7 @@ if __name__ == "__main__":
                                                                 checkpoint=args.ckpt, pixel_mean=[0., 0., 0.],
                                                                 pixel_std=[1., 1., 1.])
 
+<<<<<<< HEAD
     # pkg = import_module(args.module)
 <<<<<<< HEAD
     # net = pkg.Sam_task(sam).cuda() 
@@ -112,11 +113,16 @@ if __name__ == "__main__":
     # net = pkg.Fact_tt_Sam(sam, args.rank, s=args.scale).cuda()
 >>>>>>> 7af3e98 (ft-sam)
     net = sam.cuda()
+=======
+    pkg = import_module(args.module)
+    net = pkg.Ft_Sam(sam, args.rank).cuda()
+
+>>>>>>> 6682c16 (ft-sam)
     if args.compile:
         net = torch.compile(net)
 
-    # if args.adapt_ckpt is not None:
-    #     net.load_parameters(args.adapt_ckpt)
+    if args.adapt_ckpt is not None:
+        net.load_parameters(args.adapt_ckpt)
 
     if args.num_classes > 1:
         multimask_output = True
