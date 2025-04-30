@@ -1,9 +1,9 @@
 TRAINER="Ft-SAM"
-# DATASET="
+
 DATASET=("isic2018" "DRIVE" "CVC-ClinicDB" "UDIAT" "dsb-2018" )
 ROOT_PATH="/root/autodl-tmp/data"
 OUTPUT_PATH="/root/autodl-tmp/save/${TRAINER}"
-CONFIG="lr_0.0008_weight_decay_0.1_ablation_4"
+CONFIG="lr_0.0008_weight_decay_0.1"
 
 for dataset in ${DATASET[@]}
 do

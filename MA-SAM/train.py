@@ -95,6 +95,9 @@ if __name__ == "__main__":
 
     if not os.path.exists(args.output):
         os.makedirs(args.output)
+    
+    if not os.path.exists(args.visual_path):
+        os.makedirs(args.visual_path)
 
     # register model
     sam, img_embedding_size = sam_model_registry[args.vit_name](image_size=args.img_size,
