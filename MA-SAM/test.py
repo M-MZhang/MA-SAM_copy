@@ -269,6 +269,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/ft-sam/epoch_99.pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/BTCV')
     
@@ -279,6 +280,9 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/TNBC/lr_0.0012_weight_decay_0.1')
 =======
     parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/Ft-SAM/UDIAT/test/best.pth', help='The checkpoint after adaptation')
+=======
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/Ft-SAM/UDIAT/lr_0.0008_weight_decay_0.1/best.pth', help='The checkpoint after adaptation')
+>>>>>>> d805a3d (debug)
     parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/UDIAT', help='The path of the dataset')
     parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/Ft-SAM/UDIAT/lr_0.0008_weight_decay_0.1')
 >>>>>>> 6682c16 (ft-sam)
@@ -407,11 +411,5 @@ if __name__ == '__main__':
 
     low_res = img_embedding_size * 4
    
-    # epoch_list = np.arange(9, 300, 10)
-    # for epoch in epoch_list:
-    #     adpt_ckpt = args.adapt_ckpt.replace('best.pth', 'epoch_{}.pth'.format(epoch))
-    #     logger.info('Loading checkpoint from {}'.format(adpt_ckpt))
-    #     assert args.adapt_ckpt is not None
-    #     net.load_parameters(adpt_ckpt)
     _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
 

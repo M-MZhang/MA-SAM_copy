@@ -228,7 +228,7 @@ class Ft_Sam(nn.Module):
         
         self.sam = sam_model
 
-        self.reset_parameters() 
+        # self.reset_parameters() 
 
     def reset_parameters(self) -> None:
         for w_A in self.w_As:
