@@ -362,6 +362,8 @@ class Attention_task(nn.Module):
 
         attn = attn.softmax(dim=-1)
         # x = (attn @ v).view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
+        # 把encoder的attn 输出
+        encoder_visual = attn[:, -task_num:, :]
         x = attn @ v
         x = x[:, :-task_num, :] #取消掉concate的东西
         x = x.view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
