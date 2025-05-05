@@ -362,7 +362,7 @@ class Attention_task(nn.Module):
         attn = attn.softmax(dim=-1)
         # x = (attn @ v).view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         # 把encoder的attn 输出
-        encoder_visual = attn[:, -task_num:, :]
+        encoder_visual = attn[:, -task_num:, :-task_num] #[B*num_head, task_num, H*W]
         x = attn @ v
         x = x[:, :-task_num, :] #取消掉concate的东西
         x = x.view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
@@ -570,7 +570,7 @@ class MaskDecoder_task(nn.Module):
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
 
-        return masks, iou_pred
+        return masks, iou_pred, mask_attns
     
 
     

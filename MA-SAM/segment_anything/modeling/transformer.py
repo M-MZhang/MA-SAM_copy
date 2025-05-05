@@ -166,10 +166,10 @@ class TwoWayAttentionBlock(nn.Module):
     ) -> Tuple[Tensor, Tensor]:
         # Self attention block
         if self.skip_first_layer_pe:
-            queries = self.self_attn(q=queries, k=queries, v=queries)
+            queries, _ = self.self_attn(q=queries, k=queries, v=queries)
         else:
             q = queries + query_pe
-            attn_out = self.self_attn(q=q, k=q, v=queries)
+            attn_out, _ = self.self_attn(q=q, k=q, v=queries)
             queries = queries + attn_out
         queries = self.norm1(queries)
 

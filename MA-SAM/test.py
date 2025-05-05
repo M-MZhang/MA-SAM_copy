@@ -14,6 +14,7 @@ from segment_anything import sam_model_registry
 from torch.nn.modules.loss import CrossEntropyLoss
 from utils import DiceLoss, BinaryDiceLoss
 from PIL import Image
+import cv2
 
 from icecream import ic
 import pandas as pd
@@ -188,7 +189,12 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
     h_num = 0
     for i_batch, sampled_batch in enumerate(testdataloader):
        
-        image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 
+        image_batch, label_batch = sampled_batch['image'], sampled_batch['label']
+
+        # 二次存储对应图像，方便找到
+        img = Image.fromarray(np.array(image_batch[0].permute(1,2,0)*255).astype(np.uint8))
+        img.save(os.path.join(args.visual_path, str(i_batch) + '_img.png'))
+ 
         hw_size = image_batch.shape[-1]
         label_batch = label_batch.contiguous().view(-1, hw_size, hw_size)
 
@@ -214,14 +220,15 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
             #     img.save(os.path.join(args.visual_path, str(i_batch)+'.png'))
             #     label = Image.fromarray(np.array(label_batch[0]*255).squeeze().astype(np.uint8))
             #     label.save(os.path.join(args.visual_path,str(i_batch)+'_label.png'))
+
+            # save mask
+            img = Image.fromarray(np.array(out[0]*255).squeeze().astype(np.uint8))
+            img.save(os.path.join(args.visual_path, str(i_batch)+'_mask.png'))
             
             # 存储热力图需要的embedding
             attn = {'encoder': encoder_attns, 'decoder': decoder_attns}
-            write_json(attn, os.path.join(args.visual_path, str(i_batch) + '_attn.json'))
-            # 二次存储对应图像，方便找到
-            img = Image.fromarray(np.array(image_batch[0]*255).squeeze().astype(np.uint8))
-            img.save(os.path.join(args.visual_path, str(i_batch) + '_img.png'))
-
+            torch.save(attn, os.path.join(args.visual_path, str(i_batch) + '_attn.pt'))
+            
             
     hd = round(np.mean(hd), 4)
     dice = dice / num_test
@@ -233,8 +240,43 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
         write_json(loss, test_save_path+'/result.json')
     print("Finish test haha!")
     return dice
-    
 
+def inference_single(args, multimask_output, model, test_save_path=None):
+
+    model.eval()
+    image_name = '00ae65c1c6631ae6f2be1a449902976e6eb8483bf6b0740d00530220832c6d3e.png'
+    image_path = args.data_path +'/images/' + image_name
+    image = cv2.imread(image_path)
+    # preprocessing
+    # Normalization
+    image = ((image-np.min(image))/(np.max(image)-np.min(image)+0.00000001))
+
+    x, y, z = image.shape
+    output_size = (args.img_size, args.img_size)
+    if x!=output_size or y!=output_size:
+        image = zoom(image, (output_size[0] / x, output_size[1] / y, 1.0), order=3)
+    image = torch.from_numpy(image.astype(np.float32))
+    image = image.permute(2,0,1)
+
+    # unsqueeze for batch
+
+    image_batch = image.unsqueeze(0).cuda()
+    with torch.no_grad():
+        outputs, encoder_attns, decoder_attns = model(image_batch, multimask_output, args.img_size)
+
+        low_res_logits = outputs['low_res_logits']
+        out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
+        out = out.cpu().detach().numpy()
+    
+    # save mask
+    img = Image.fromarray(np.array(out[0]*255).squeeze().astype(np.uint8))
+    img.save(os.path.join(args.visual_path, image_name.split('.')[0] +'_mask.png'))
+            
+    # 存储热力图需要的embedding
+    attn = {'encoder': encoder_attns, 'decoder': decoder_attns}
+    torch.save(attn, os.path.join(args.visual_path, image_name.split('.')[0] + '_attn.pt'))
+
+    print("Finish test haha!")
 
 def config_to_dict(config):
     items_dict = {}
@@ -253,7 +295,7 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/visualization')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
-    parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
+    parser.add_argument('--batch_size', type=int, default=1, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
     parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/dsb-2018')  
     
@@ -331,5 +373,6 @@ if __name__ == '__main__':
     low_res = img_embedding_size * 4
    
    
-    _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
+    # _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
+    inference_single(args, multimask_output, net, test_save_path)
 
