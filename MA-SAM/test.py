@@ -167,9 +167,6 @@ def inference(args, multimask_output, model, test_save_path=None):
 def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=None):
 
     hd_score = HD_Score(n_classes=args.num_classes+1)
-    # hd_metric = HausdorffDistance()
-    # if args.n_gpu > 1:
-    #     model = nn.DataParallel(model)
     model.eval()
     db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
                             transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
@@ -326,11 +323,6 @@ if __name__ == '__main__':
 
     low_res = img_embedding_size * 4
    
-    # epoch_list = np.arange(9, 300, 10)
-    # for epoch in epoch_list:
-    #     adpt_ckpt = args.adapt_ckpt.replace('best.pth', 'epoch_{}.pth'.format(epoch))
-    #     logger.info('Loading checkpoint from {}'.format(adpt_ckpt))
-    #     assert args.adapt_ckpt is not None
-    #     net.load_parameters(adpt_ckpt)
+   
     _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
 

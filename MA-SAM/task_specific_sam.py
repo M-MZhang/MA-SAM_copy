@@ -205,22 +205,21 @@ class ImageEncoderViT_task(nn.Module):
             x = x + self.ImageEncoderViT.pos_embed
 
         outputs = []
+        encoder_attns = []
         count = 0
         for i in range(len(self.ImageEncoderViT.blocks)):
             if i in self.init_layers:
-                x = self.ImageEncoderViT.blocks[i](x, task_embed[count])
+                x, encoder_visual = self.ImageEncoderViT.blocks[i](x, task_embed[count])
                 count += 1
                 outputs.append(x)
+                encoder_attns.append(encoder_visual)
             else:
                 x = self.ImageEncoderViT.blocks[i](x) 
-                # if i == 0:
-                #     outputs.append(x)
-            
 
         x = self.ImageEncoderViT.neck(x.permute(0, 3, 1, 2)) #[B, C, H, W]
         
 
-        return outputs
+        return outputs, encoder_attns
 
 class Task_adapter(nn.Module):
 
@@ -324,7 +323,7 @@ class Block_task(nn.Module):
             H, W = x.shape[1], x.shape[2]
             x, pad_hw = window_partition(x, self.Block.window_size)  # [B * num_windows, window_size, window_size, C]
 
-        x = self.Block.attn(x, task_embed)
+        x, encoder_visual = self.Block.attn(x, task_embed)
         # Reverse window partition
         if self.Block.window_size > 0:
             x = window_unpartition(x, self.Block.window_size, pad_hw, (H, W))
@@ -333,7 +332,7 @@ class Block_task(nn.Module):
 
         x = x + self.Block.mlp(self.Block.norm2(x))
 
-        return x
+        return x, encoder_visual
 
 class Attention_task(nn.Module):
     def __init__(
@@ -369,7 +368,7 @@ class Attention_task(nn.Module):
         x = x.view(B, self.Attention.num_heads, H, W, -1).permute(0, 2, 3, 1, 4).reshape(B, H, W, -1)
         x = self.Attention.proj(x)
 
-        return x
+        return x, encoder_visual
 
 class _LoRA_qkv(nn.Module):
     """In Sam it is implemented as
@@ -492,10 +491,6 @@ class MaskDecoder_task(nn.Module):
                 final_trans=(i==0)
         )
             
-            # self.transformer_list.append(copy.deepcopy(MaskDecoder.transformer))
-        
-        # self.u_fusion = U_decoder(transformer_dim, num_layer) # less than transformer module
-           
     
     def forward(
             self,
@@ -507,7 +502,7 @@ class MaskDecoder_task(nn.Module):
             task_specific_embed: torch.Tensor,
     ):  
     
-        masks, iou_pred = self.predict_masks(
+        masks, iou_pred, mask_attns = self.predict_masks(
             image_embeddings=image_embeddings,
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
@@ -515,7 +510,7 @@ class MaskDecoder_task(nn.Module):
             task_specific_embed = task_specific_embed, 
         )
                 
-        return masks, iou_pred
+        return masks, iou_pred, mask_attns
 
     def predict_masks(
         self,
@@ -530,8 +525,7 @@ class MaskDecoder_task(nn.Module):
         output_tokens = torch.cat([self.iou_tokens.weight, self.mask_tokens.weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1) #[1, -1, -1]
 
-        # original_embedding = image_embeddings[0]
-        # image_embeddings = image_embeddings[1:]
+        mask_attns = []
         
         # Run the transforme
         for i in range(self.num_layer-1, -1, -1): # use the reversed number to start from the end
@@ -551,7 +545,8 @@ class MaskDecoder_task(nn.Module):
                 mask_tokens = task_specific_embed[i].unsqueeze(0).expand(hs.size(0), -1, -1)
                 hs = torch.cat((hs[:, :-self.num_mask_tokens,:], mask_tokens), dim=1) 
              
-            hs, src = self.transformer_list[i](src, pos_src, hs)
+            hs, src, mask_attn = self.transformer_list[i](src, pos_src, hs)
+            mask_attns.append(mask_attn)
         
         # #增补第一层的细节？
         # hs = hs[:, :-self.num_mask_tokens, :]
@@ -759,7 +754,7 @@ class Sam_task(nn.Module):
         # get image and mask task_embeds
         mask_task_embed = self.task_adapter(self.task_specific_embed_list)
         
-        image_embeddings = self.sam.image_encoder(input_images, self.task_specific_embed_list) #
+        image_embeddings, encoder_attns = self.sam.image_encoder(input_images, self.task_specific_embed_list) #
         image_embeddings = self.Neck_list(image_embeddings) #[image_embed_dim -> decoder_embed_dim]
         
         # prompt encoder
@@ -767,7 +762,7 @@ class Sam_task(nn.Module):
             points=None, boxes=None, masks=None,
         ) #[batch, 256, 32, 32]
 
-        low_res_masks, iou_predictions = self.mask_decoder(
+        low_res_masks, iou_predictions, decoder_attns = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.sam.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_embeddings,
