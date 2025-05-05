@@ -107,16 +107,16 @@ class TwoWayTransformer(nn.Module):
         # Apply the final attenion layer from the points to the image
         q = queries + point_embedding
         k = keys + image_pe
-        attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
+        attn_out, mask_attn= self.final_attn_token_to_image(q=q, k=k, v=keys)
         queries = queries + attn_out
         queries = self.norm_final_attn(queries)
 
         q = keys + image_embedding
-        attn_out = self.final_image_self_attn(q=keys, k=q, v=q)
+        attn_out, _ = self.final_image_self_attn(q=keys, k=q, v=q)
         keys = keys + attn_out
         keys = self.norm_final_image_attn(keys)
 
-        return queries, keys
+        return queries, keys, mask_attn
 
 
 class TwoWayAttentionBlock(nn.Module):
@@ -176,10 +176,10 @@ class TwoWayAttentionBlock(nn.Module):
         # Cross attention block, tokens attending to image embedding
         q = queries + query_pe
         k = keys + key_pe
-        attn_out = self.cross_attn_token_to_image(q=q, k=k, v=keys)
+        attn_out, _ = self.cross_attn_token_to_image(q=q, k=k, v=keys)
         queries = queries + attn_out
         queries = self.norm2(queries)
-
+        
         # MLP block
         mlp_out = self.mlp(queries)
         queries = queries + mlp_out
@@ -188,7 +188,7 @@ class TwoWayAttentionBlock(nn.Module):
         # Cross attention block, image embedding attending to tokens
         q = queries + query_pe
         k = keys + key_pe
-        attn_out = self.cross_attn_image_to_token(q=k, k=q, v=queries)
+        attn_out, _ = self.cross_attn_image_to_token(q=k, k=q, v=queries)
         keys = keys + attn_out
         keys = self.norm4(keys)
 
@@ -198,7 +198,7 @@ class TwoWayAttentionBlock(nn.Module):
 class Attention(nn.Module):
     """
     An attention layer that allows for downscaling the size of the embedding
-    after projection to queries, keys, and values.
+    after projection to queries, keys, and values.t
     """
 
     def __init__(
@@ -243,11 +243,11 @@ class Attention(nn.Module):
         _, _, _, c_per_head = q.shape
         attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
-        attn = torch.softmax(attn, dim=-1)
+        attn = torch.softmax(attn, dim=-1) #这里就是热力图
 
         # Get output
         out = attn @ v
         out = self._recombine_heads(out)
         out = self.out_proj(out)
 
-        return out
+        return out, attn
