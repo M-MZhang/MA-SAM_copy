@@ -287,6 +287,8 @@ class Ft_Sam(nn.Module):
         mask_decoder_values = [state_dict[k] for k in mask_decoder_keys]
         mask_decoder_new_state_dict = {k: v for k, v in zip(mask_decoder_keys, mask_decoder_values)}
         sam_dict.update(mask_decoder_new_state_dict)
+        
+        self.load_state_dict(sam_dict)
 
          # 因为这下面的内容并不是存于字典的
         for i, w_A_linear in enumerate(self.w_As):
