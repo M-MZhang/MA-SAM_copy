@@ -24,7 +24,7 @@ from scipy.ndimage import zoom
 from utils import calculate_metric_percase, write_json, HD_Score
 import nibabel as nib
 
-from datasets.dataset import dataset_reader, RandomGenerator
+from datasets.dataset import dataset_reader, RandomGenerator, test_transform
 from torchvision import transforms
 import json
 from torch import nn
@@ -169,7 +169,7 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
     hd_score = HD_Score(n_classes=args.num_classes+1)
     model.eval()
     db_test = dataset_reader(base_dir=args.data_path, split="test", num_classes=args.num_classes, 
-                            transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
+                            transform=transforms.Compose([test_transform(output_size=[args.img_size, args.img_size], low_res=[low_res, low_res])]),
                             test_name=None)
 
     print("The length of test set is: {}".format(len(db_test)))
@@ -195,7 +195,7 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
         image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
         
         with torch.no_grad():
-            outputs = model(image_batch, multimask_output, args.img_size)
+            outputs, encoder_attns, decoder_attns = model(image_batch, multimask_output, args.img_size)
             low_res_logits = outputs['low_res_logits']
             
             out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
@@ -209,11 +209,18 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
             num_test += image_batch.shape[0]
 
             #可视化一下
-            if i_batch <10 :
-                img = Image.fromarray(np.array(out[0]*255).squeeze().astype(np.uint8))
-                img.save(os.path.join(args.visual_path, str(i_batch)+'.png'))
-                label = Image.fromarray(np.array(label_batch[0]*255).squeeze().astype(np.uint8))
-                label.save(os.path.join(args.visual_path,str(i_batch)+'_label.png'))
+            # if i_batch <10 :
+            #     img = Image.fromarray(np.array(out[0]*255).squeeze().astype(np.uint8))
+            #     img.save(os.path.join(args.visual_path, str(i_batch)+'.png'))
+            #     label = Image.fromarray(np.array(label_batch[0]*255).squeeze().astype(np.uint8))
+            #     label.save(os.path.join(args.visual_path,str(i_batch)+'_label.png'))
+            
+            # 存储热力图需要的embedding
+            attn = {'encoder': encoder_attns, 'decoder': decoder_attns}
+            write_json(attn, os.path.join(args.visual_path, str(i_batch) + '_attn.json'))
+            # 二次存储对应图像，方便找到
+            img = Image.fromarray(np.array(image_batch[0]*255).squeeze().astype(np.uint8))
+            img.save(os.path.join(args.visual_path, str(i_batch) + '_img.png'))
 
             
     hd = round(np.mean(hd), 4)
@@ -241,14 +248,14 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/lr_0.0012_weight_decay_0.1/best.pth', help='The checkpoint after adaptation')
-    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/TNBC', help='The path of the dataset')
-    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/TNBC/lr_0.0012_weight_decay_0.1')
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/lr_0.0008_weight_decay_0.1_augmentation_True/best.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/data/dsb-2018', help='The path of the dataset')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/dsb-2018/visualization')
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=20, help='batch_size per gpu')
-    parser.add_argument('--n_gpu', type=int, default=2, help='total gpu') 
-    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/DRIVE')  
+    parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
+    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/dsb-2018')  
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')

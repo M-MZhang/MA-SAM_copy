@@ -548,12 +548,8 @@ class MaskDecoder_task(nn.Module):
             hs, src, mask_attn = self.transformer_list[i](src, pos_src, hs)
             mask_attns.append(mask_attn)
         
-        # #增补第一层的细节？
-        # hs = hs[:, :-self.num_mask_tokens, :]
-        # src = src + original_embedding.flatten(2).permute(0, 2, 1) + src0
-        # hs, src = self.last_transformer(src, pos_src, hs)
-        
-        
+    
+
         iou_token_out = hs[:, 0, :]
         mask_tokens_out = hs[:, 1 : (1 + self.num_mask_tokens), :]
 
@@ -782,7 +778,7 @@ class Sam_task(nn.Module):
             'low_res_logits': low_res_masks
         }
     
-        return outputs
+        return outputs, encoder_attns, decoder_attns
     
     def init_weights(self):
         
