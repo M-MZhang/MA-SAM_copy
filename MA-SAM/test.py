@@ -244,7 +244,7 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
 def inference_single(args, multimask_output, model, test_save_path=None):
 
     model.eval()
-    image_name = '00ae65c1c6631ae6f2be1a449902976e6eb8483bf6b0740d00530220832c6d3e.png'
+    image_name = '1e488c42eb1a54a3e8412b1f12cde530f950f238d71078f2ede6a85a02168e1f.png'
     image_path = args.data_path +'/images/' + image_name
     image = cv2.imread(image_path)
     # preprocessing
