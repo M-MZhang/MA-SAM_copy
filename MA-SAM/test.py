@@ -244,7 +244,11 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
 def inference_single(args, multimask_output, model, test_save_path=None):
 
     model.eval()
+<<<<<<< HEAD
     image_name = '01_2.png'
+=======
+    image_name = 'image.png'
+>>>>>>> bfb764c (visualization)
     image_path = os.path.join(args.visual_path,image_name)
     image = cv2.imread(image_path)
     # preprocessing
@@ -290,14 +294,24 @@ def config_to_dict(config):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+<<<<<<< HEAD
     parser.add_argument('--adapt_ckpt', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/dsb-2018/lr_0.0008_weight_decay_0.1_augmentation_True/best.pth', help='The checkpoint after adaptation')
     parser.add_argument('--data_path', type=str, default='/root/data1/zmm/seg4medicine/data/visualization/TNBC', help='The path of the dataset')
     parser.add_argument('--output_dir', type=str, default='/root/data1/zmm/seg4medicine/save/HSP-SAM/TNBC/visualization')
+=======
+    parser.add_argument('--adapt_ckpt', type=str, default='/root/autodl-tmp/save/HSP-SAM/CVC-ClinicDB/lr_0.0008_weight_decay_0.1_augmentation_True/best.pth', help='The checkpoint after adaptation')
+    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/visualization/ColonDB/Attention_Map', help='The path of the dataset')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-tmp/save/HSP-SAM/ColonDB/visualization')
+>>>>>>> bfb764c (visualization)
     parser.add_argument('--num_classes', type=int, default=1)
     parser.add_argument('--img_size', type=int, default=512, help='Input image size of the network')
     parser.add_argument('--batch_size', type=int, default=1, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
+<<<<<<< HEAD
     parser.add_argument('--visual_path', type=str, default='/root/data1/zmm/seg4medicine/save/visualization/TNBC/Attention_Map')  
+=======
+    parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/ColonDB/Attention_Map')  
+>>>>>>> bfb764c (visualization)
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
