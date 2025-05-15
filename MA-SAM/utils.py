@@ -101,7 +101,7 @@ class BinaryDiceLoss(nn.Module):
     def forward(self, y_pred, y_true):
         # y_pred: 模型输出的概率 [N, H, W]（未经过sigmoid）
         # y_true: 真实标签 [N, H, W]，值为0或1
-        y_pred = torch.sigmoid(y_pred)  # 转换为概率 [0,1]
+        y_pred = torch.sigmoid(y_pred) # 转换为概率 [0,1]
         if (math.nan in y_pred) or (math.inf in y_pred):
             print("Erro!")
         
@@ -258,7 +258,7 @@ class IoU(nn.Module):
     def forward(self, inputs, targets, smooth=1):
  
         inputs, targets = self.leave_only_batch_and_flatten(inputs, targets)
-        # inputs_after_sigmoid = torch.sigmoid(inputs)
+        inputs = torch.sigmoid(inputs)
  
         intersection = (inputs * targets).sum(1)
         total = (inputs + targets).sum(1)

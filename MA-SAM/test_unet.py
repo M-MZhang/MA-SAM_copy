@@ -373,6 +373,5 @@ if __name__ == '__main__':
     low_res = img_embedding_size * 4
    
    
-    # _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
     inference_single(args, multimask_output, net, test_save_path)
 
