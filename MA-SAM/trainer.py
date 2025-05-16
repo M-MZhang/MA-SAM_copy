@@ -142,7 +142,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=16, pin_memory=True,
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True,
                              worker_init_fn=worker_init_fn, drop_last=False) # 这个drop_last好像会有点什么问题？
     
     num = 0
@@ -151,23 +151,21 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
             para.requires_grad_(False)
             if "task_specific_embed_list" in name: #这一步就已经将mask_decoder中的mask_tokens的梯度置为true了
                 para.requires_grad_(True)
-                num += para.numel()
                 # print(name)
             elif "Neck_list" in name:
                 para.requires_grad_(True)
-                num += para.numel()
             elif "task_adapter" in name:
                 para.requires_grad_(True)
-                num += para.numel()
             elif "mask_decoder" in name and 'sam' not in name:
                 para.requires_grad_(True)
-                num += para.numel()
+                
     
     # varify the trainable parameters
     for name, para in model.named_parameters():
         if para.requires_grad:
             print(name)
             logger.info(name)
+            num += para.numel()
     logger.info("The number of trainable parameters is {}M".format(num/1000000))
 
 
@@ -188,7 +186,7 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=b_lr, momentum=0.9, weight_decay=0.0001) 
     if args.use_amp:
         # scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
-        scaler = torch.amp.GradScaler(enabled=args.use_amp)
+        scaler = torch.cuda.amp.GradScaler(enabled=args.use_amp)
 
    
     writer = SummaryWriter(snapshot_path + '/log')
@@ -201,9 +199,9 @@ def trainer_run(args, model, snapshot_path, multimask_output, low_res):
     iterator = tqdm(range(max_epoch), ncols=70)
 
     # 测试最基础的版本
-    best_dice = inference(args, multimask_output, model,  low_res, logger, None)
+    # best_dice = inference(args, multimask_output, model,  low_res, logger, None)
 
-    # best_dice = -np.inf
+    best_dice = -np.inf
     for epoch_num in iterator:
         for i_batch, sampled_batch in enumerate(trainloader):
             image_batch, label_batch = sampled_batch['image'], sampled_batch['label'] 

@@ -40,12 +40,12 @@ data_std = 68.47153712416372
 def test_single_volume(image, label, net, classes, multimask_output, patch_size=[512, 512], test_save_path=None, case=None):
     
     image, label = image.squeeze(0), label.squeeze(0) #[d, h, w, 3], [d, h, w]
-    # label = label[:,:,:,2]
+    label = label[:,:,:,2]
     
     probability = np.expand_dims(np.zeros_like(label, dtype=np.float32), axis=-1) #[d, h, w, 1]
     probability = repeat(probability, 'd h w c -> d h w (repeat c)', repeat=classes+1) #[d, h, w, classes+1]
 
-    # probability = np.concatenate((probability[0:1], probability[0:1], probability, probability[-1:], probability[-1:]), axis=0)
+    probability = np.concatenate((probability[0:1], probability[0:1], probability, probability[-1:], probability[-1:]), axis=0)
 
     avg_cnt = np.ones_like(probability, dtype=np.float32) #[d, h, w, classes+1]
     for ind in range(image.shape[0]):
@@ -54,9 +54,11 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
         if x != patch_size[0] or y != patch_size[1]:
             slice = zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3)
         
-        inputs = torch.from_numpy(slice).unsqueeze(0).float().cuda() #[b, h, w, c]
+        inputs = torch.from_numpy(slice).unsqueeze(0).unsqueeze(0).float().cuda() #[b, c, h, w, d]
+        inputs = repeat(inputs, 'b c h w d -> b (repeat c) h w d', repeat=3)
         # inputs = repeat(inputs, 'b h w c -> b c h w', repeat=3)
-        inputs = torch.permute(inputs, (0, 3, 1, 2))
+        # inputs = torch.permute(inputs, (0, 3, 1, 2))
+        inputs = torch.permute(inputs, (0, -1, 1, 2, 3))
         net.eval()
         with torch.no_grad():
             outputs = net(inputs, multimask_output, patch_size[0])
@@ -71,51 +73,53 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
             if x != out_h or y != out_w:
                 out_pred = zoom(out_pred, (1.0, x / out_h, y / out_w, 1.0), order=3)
             
-            probability[ind] += out_pred[0]
-            avg_cnt[ind] += 1.
+            probability[ind: ind+5] += out_pred
+            avg_cnt[ind: ind+5] += 1.
             
     probability = probability/avg_cnt
-    prediction = np.argmax(probability, axis=-1)
+    # prediction = np.argmax(probability, axis=-1)
     # prediction = prediction[2:-2]
+    prediction = np.argmax(probability, axis=-1)
+    prediction = prediction[2:-2]
 
     metric_list = []
     for i in range(1, classes + 1):
         metric_list.append(calculate_metric_percase(prediction == i, label == i))
 
-    if test_save_path is not None:
+    # if test_save_path is not None:
         
-        image_data = np.moveaxis(image[:,:,:,2].astype(np.float32), 0, -1)
-        prediction_data = np.moveaxis(prediction.astype(np.float32), 0, -1)
-        label_data = np.moveaxis(label.astype(np.float32), 0, -1)
+    #     image_data = np.moveaxis(image[:,:,:,2].astype(np.float32), 0, -1)
+    #     prediction_data = np.moveaxis(prediction.astype(np.float32), 0, -1)
+    #     label_data = np.moveaxis(label.astype(np.float32), 0, -1)
 
-        image_data = np.rot90(np.flip(image_data, axis=1), k=-1, axes=(0, 1))
-        prediction_data = np.rot90(np.flip(prediction_data, axis=1), k=-1, axes=(0, 1))
-        label_data = np.rot90(np.flip(label_data, axis=1), k=-1, axes=(0, 1))
+    #     image_data = np.rot90(np.flip(image_data, axis=1), k=-1, axes=(0, 1))
+    #     prediction_data = np.rot90(np.flip(prediction_data, axis=1), k=-1, axes=(0, 1))
+    #     label_data = np.rot90(np.flip(label_data, axis=1), k=-1, axes=(0, 1))
 
-        # Create Nifti images
-        img_nifti = nib.Nifti1Image(image_data, np.eye(4))
-        prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
-        lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
+    #     # Create Nifti images
+    #     img_nifti = nib.Nifti1Image(image_data, np.eye(4))
+    #     prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
+    #     lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
 
-        # Set spacing
-        img_nifti.header['pixdim'][1:4] = [1, 1, 1]
-        prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
-        lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
+    #     # Set spacing
+    #     img_nifti.header['pixdim'][1:4] = [1, 1, 1]
+    #     prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
+    #     lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
 
-        # Save the images
-        img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
-        prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
-        lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
+    #     # Save the images
+    #     img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
+    #     prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
+    #     lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
         
     return metric_list
 
-def inference(args, multimask_output, model, logger, test_save_path=None):
+def inference(args, multimask_output, model, low_res, logger, test_save_path=None):
     data_fd_list = ['0035', '0036', '0037', '0038', '0039', '0040']
     
     model.eval()
     metric_list = []
     for data_fd in tqdm(data_fd_list):
-        image_file_path = args.data_path +'/npy_new'+'/img'+str(data_fd)+'/images'
+        image_file_path = args.data_path +'/'+str(data_fd)+'/images'
         image_file_list = os.listdir(image_file_path)
         image_file_list.sort()
         image_arr_list = []
@@ -123,7 +127,8 @@ def inference(args, multimask_output, model, logger, test_save_path=None):
         for image_file in image_file_list:
             with open(image_file_path + '/' + image_file, 'rb') as file:
                 image_arr = pickle.load(file)
-            with open(args.data_path + '/npy_new'+'/img'+str(data_fd)+'/masks/'+image_file, 'rb') as file:
+            mask_file = image_file.replace('image', 'mask')
+            with open(args.data_path + '/'+str(data_fd)+'/masks/'+mask_file, 'rb') as file:
                 mask_arr = pickle.load(file)
 
             image_arr = np.clip(image_arr, HU_min, HU_max)

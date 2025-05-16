@@ -273,6 +273,7 @@ class d_Block_task(nn.Module):
         # end 3D adapter
 
         x = x + self.Block.mlp(self.Block.norm2(x))
+        return x
     
 
 class d_Block(nn.Module):
@@ -329,6 +330,7 @@ class d_Block(nn.Module):
         # end 3D adapter
 
         x = x + self.Block.mlp(self.Block.norm2(x))
+        return x
 
 class Task_adapter(nn.Module):
 

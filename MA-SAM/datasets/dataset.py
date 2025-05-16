@@ -23,8 +23,8 @@ data_std = 68.47153712416372
 
 def read_image(path):
     with open(path, 'rb') as file:
-        # img = pickle.load(file)
-        img = cv2.imread(path)
+        img = pickle.load(file)
+        # img = cv2.imread(path)
         return img
 
 def random_rot_flip(image, label):
@@ -384,29 +384,12 @@ class dataset_reader(Dataset):
         
         self.data_dir = base_dir
 
-        # with open(base_dir+'/split.json', 'r') as file:
-        #     data = json.load(file)
-
         if split=="train":
             df = pd.read_csv(base_dir+'/training.csv')
             self.sample_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["image_pth"]]
             self.masks_list = [base_dir+'/'+sample_pth.split('/'+base_dir.split('/')[-1]+'/')[-1] for sample_pth in df["mask_pth"]]
             self.num_classes = num_classes
         
-        # train_list = data['train']
-        # val_list = data['val']
-        # test_list = val_list
-        # if split == 'train':
-        #     self.sample_list = train_list
-        # elif split == 'val':
-        #     self.sample_list = val_list
-        # elif split == 'test':
-        #     if test_name is not None:
-        #         self.sample_list = test_list[test_name]
-        #     else:
-        #         self.sample_list = test_list
-        
-        # self.num_classes = num_classes
 
     def __len__(self):
         return len(self.sample_list)
