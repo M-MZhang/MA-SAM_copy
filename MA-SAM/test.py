@@ -14,7 +14,11 @@ from segment_anything import sam_model_registry
 from torch.nn.modules.loss import CrossEntropyLoss
 from utils import DiceLoss, BinaryDiceLoss
 from PIL import Image
-
+import time
+import copy
+from thop import profile, clever_format
+import fvcore
+from fvcore.nn import FlopCountAnalysis
 from icecream import ic
 import pandas as pd
 import pickle
@@ -229,8 +233,64 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
         write_json(loss, test_save_path+'/result.json')
     print("Finish test haha!")
     return dice, hd
-    
 
+
+def test_model_efficiency(model, input_size=(1, 3, 224, 224), device='cuda'):
+
+    # import gc
+
+    # # 深拷贝模型，防止 buffer 冲突
+    # model_copy = copy.deepcopy(model)
+    # model_copy = model_copy.to(device)
+    # model_copy.eval()
+
+    # # 清理旧 hook（必要时可以对 model 原体执行）
+    # for m in model_copy.modules():
+    #     if hasattr(m, 'total_ops'):
+    #         del m._buffers['total_ops']
+    #     if hasattr(m, 'total_params'):
+    #         del m._buffers['total_params']
+
+    # 准备模型和输入
+    model = model.to(device)
+    model.eval()
+    input_tensor = torch.randn(input_size).to(device)
+
+    # for m in model.modules():
+    #     if isinstance(m, torch.nn.Conv2d):
+    #         if not hasattr(m, 'total_ops'):
+    #             m.total_ops = 0
+    
+    # try:
+    #     with torch.no_grad():
+    #         flops, params = profile(model_copy, inputs=(input_tensor, False, 1024), verbose=False)
+    #         flops, params = clever_format([flops, params], "%.2f")
+    #         print(f"FLOPs: {flops}, Params: {params}")
+    #         # return flops, params
+    # except Exception as e:
+    #     print("FLOP profiling failed:", e)
+    # finally:
+    #     del model_copy
+    #     gc.collect()
+    #     torch.cuda.empty_cache()
+    # 计算FPS
+    warmup = 10
+    runs = 50
+    with torch.no_grad():
+        # 预热
+        for _ in range(warmup):
+            _ = model(input_tensor, False, 1024)
+        # 正式计时
+        start_time = time.time()
+        for _ in range(runs):
+            _ = model(input_tensor, False, 1024)
+        total_time = time.time() - start_time
+        fps = runs / total_time
+
+    # print(f"Model Parameters: {params}")
+    # print(f"FLOPs: {flops}")
+    print(f"FPS: {fps:.2f}")
+    return 0
 
 def config_to_dict(config):
     items_dict = {}
@@ -256,7 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
     parser.add_argument('--deterministic', type=int, default=1, help='whether use deterministic training')
-    parser.add_argument('--ckpt', type=str, default='/root/autodl-tmp/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
+    parser.add_argument('--ckpt', type=str, default='/root/data1/zmm/seg4medicine/pretrained/sam_vit_h_4b8939.pth', help='Pretrained checkpoint')
     parser.add_argument('--vit_name', type=str, default='vit_h', help='Select one vit model')
     parser.add_argument('--rank', type=int, default=32, help='Rank for FacT adaptation')
     parser.add_argument('--scale', type=float, default=1.0)
@@ -287,8 +347,8 @@ if __name__ == '__main__':
     net = pkg.Sam_task(sam, r=32).cuda() 
     # net = sam.cuda()
 
-    assert args.adapt_ckpt is not None
-    net.load_parameters(args.adapt_ckpt)
+    # assert args.adapt_ckpt is not None
+    # net.load_parameters(args.adapt_ckpt)
     # net.load_state_dict(torch.load(args.adapt_ckpt))
    
 
@@ -332,5 +392,5 @@ if __name__ == '__main__':
     #     logger.info('Loading checkpoint from {}'.format(adpt_ckpt))
     #     assert args.adapt_ckpt is not None
     #     net.load_parameters(adpt_ckpt)
-    _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
-
+    # _ = inference_2d(args, multimask_output, net,  low_res, logger, log_folder)
+    _ = test_model_efficiency(net, input_size=(1, 3, 512, 512), device='cuda')

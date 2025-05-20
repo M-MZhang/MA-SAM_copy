@@ -743,12 +743,12 @@ class Sam_task(nn.Module):
     def device(self) -> Any:
         return self.sam.pixel_mean.device
 
-    def forward(self, batched_input, multimask_output, image_size):
+    def forward(self, batched_input, multimask_output=False, image_size=1024):
         
         outputs = self.forward_train(batched_input, multimask_output, image_size)
         return outputs
 
-    def forward_train(self, batched_input, multimask_output, image_size):
+    def forward_train(self, batched_input, multimask_output=False, image_size=1024):
         b, h, w = batched_input.shape[0], batched_input.shape[2], batched_input.shape[3] # [b, 3, h, w]
         batched_input = batched_input.contiguous().view(-1, 3, h, w) #[b, 3, h, w]
 
