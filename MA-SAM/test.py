@@ -244,8 +244,12 @@ def inference_2d(args, multimask_output, model, low_res, logger, test_save_path=
 def inference_single(args, multimask_output, model, test_save_path=None):
 
     model.eval()
+<<<<<<< HEAD
     image_name = 'cvc-300.png'
 
+=======
+    image_name = 'TNBC.png'
+>>>>>>> 33c878e (画图)
     image_path = os.path.join(args.visual_path,image_name)
     image = cv2.imread(image_path)
     # preprocessing
@@ -268,6 +272,7 @@ def inference_single(args, multimask_output, model, test_save_path=None):
         low_res_logits = outputs['low_res_logits']
         out = torch.argmax(torch.softmax(low_res_logits, dim=1), dim=1)
         out = out.cpu().detach().numpy()
+        out = zoom(out, (1.0, x / out.shape[1], y / out.shape[2]), order=3)
     
     # save mask
     img = Image.fromarray(np.array(out[0]*255).squeeze().astype(np.uint8))
@@ -300,9 +305,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=1, help='batch_size per gpu')
     parser.add_argument('--n_gpu', type=int, default=1, help='total gpu') 
 
-
     parser.add_argument('--visual_path', type=str, default='/root/autodl-tmp/visualization/Appendix/segmentation/Polyp')  
-
     
     parser.add_argument('--seed', type=int, default=1234, help='random seed')
     parser.add_argument('--is_savenii', action='store_true', help='Whether to save results during inference')
