@@ -23,7 +23,7 @@ from datetime import datetime
 from einops import repeat
 from scipy.ndimage import zoom
 from utils import calculate_metric_percase, write_json, HD_Score
-import nibabel as nib
+# import nibabel as nib
 
 from datasets.dataset import dataset_reader, RandomGenerator, test_transform
 from torchvision import transforms
@@ -94,19 +94,19 @@ def test_single_volume(image, label, net, classes, multimask_output, patch_size=
         label_data = np.rot90(np.flip(label_data, axis=1), k=-1, axes=(0, 1))
 
         # Create Nifti images
-        img_nifti = nib.Nifti1Image(image_data, np.eye(4))
-        prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
-        lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
+        # img_nifti = nib.Nifti1Image(image_data, np.eye(4))
+        # prd_nifti = nib.Nifti1Image(prediction_data, np.eye(4))
+        # lab_nifti = nib.Nifti1Image(label_data, np.eye(4))
 
-        # Set spacing
-        img_nifti.header['pixdim'][1:4] = [1, 1, 1]
-        prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
-        lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
+        # # Set spacing
+        # img_nifti.header['pixdim'][1:4] = [1, 1, 1]
+        # prd_nifti.header['pixdim'][1:4] = [1, 1, 1]
+        # lab_nifti.header['pixdim'][1:4] = [1, 1, 1]
 
-        # Save the images
-        img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
-        prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
-        lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
+        # # Save the images
+        # img_nifti.to_filename(f"{test_save_path}/{case}_img.nii.gz")
+        # prd_nifti.to_filename(f"{test_save_path}/{case}_pred.nii.gz")
+        # lab_nifti.to_filename(f"{test_save_path}/{case}_gt.nii.gz")
         
     return metric_list
 
